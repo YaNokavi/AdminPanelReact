@@ -1,5 +1,5 @@
 import {
-  createBrowserRouter,
+  createHashRouter,
   createRoutesFromElements,
   Route,
 } from "react-router-dom";
@@ -9,7 +9,7 @@ import ContactsPage from "../pages/ContactsPage";
 import FAQPage from "../pages/FAQPage";
 import HomePage from "../pages/HomePage";
 
-export const router = createBrowserRouter(
+export const router = createHashRouter(
   createRoutesFromElements(
     <Route path="/" element={<Layout />}>
       <Route index element={<HomePage />} />
@@ -18,7 +18,7 @@ export const router = createBrowserRouter(
       <Route path="*" element={<NotFoundPage />} />
     </Route>,
   ),
-  {
-    basename: "/AdminPanelReact",
-  },
+  // {
+  //   basename: "/AdminPanelReact",
+  // },
 );
