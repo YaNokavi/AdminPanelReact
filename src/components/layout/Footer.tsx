@@ -5,7 +5,7 @@ export default function Footer() {
         <div className="flex items-center gap-2 mb-2 md:mb-0 md:absolute md:left-4 sm:md:left-6 lg:md:left-8">
           <a
             className="text-text-muted hover:text-text-main transition"
-            href="https://github.com/YaNokavi/AdminPanelCunaEdu"
+            href="https://github.com/YaNokavi/AdminPanelReact"
             target="_blank"
             rel="noreferrer"
             title="GitHub"
@@ -16,7 +16,7 @@ export default function Footer() {
           </a>
           <a
             className="text-text-muted hover:text-text-main transition text-sm"
-            href="https://github.com/YaNokavi/AdminPanelCunaEdu"
+            href="https://github.com/YaNokavi/AdminPanelReact"
             target="_blank"
             rel="noreferrer"
           >

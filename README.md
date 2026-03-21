@@ -4,4 +4,4 @@
 
 Проект использует **React** и **Tailwind CSS** (версия 3.x).
 
-**Ссылка на сайт:** https://yanokavi.github.io/AdminPanelCunaEdu/
+**Ссылка на сайт:** https://yanokavi.github.io/AdminPanelReact/

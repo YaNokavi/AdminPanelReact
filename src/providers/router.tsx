@@ -18,4 +18,7 @@ export const router = createBrowserRouter(
       <Route path="*" element={<NotFoundPage />} />
     </Route>,
   ),
+  {
+    basename: "/AdminPanelReact",
+  },
 );

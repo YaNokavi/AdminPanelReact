@@ -313,11 +313,11 @@ export default function ContactsPage() {
                   </p>
                   <a
                     className="text-sm text-primary hover:text-primary-hover transition"
-                    href="https://github.com/YaNokavi/AdminPanelCunaEdu"
+                    href="https://github.com/YaNokavi/AdminPanelReact"
                     target="_blank"
                     rel="noreferrer"
                   >
-                    AdminPanelCunaEdu
+                    AdminPanelReact
                   </a>
                 </div>
               </div>
