@@ -15,7 +15,6 @@ export const router = createBrowserRouter(
       <Route index element={<HomePage />} />
       <Route path="faq" element={<FAQPage />} />
       <Route path="contacts" element={<ContactsPage />} />
-      {/* Маршрут для обработки несуществующих страниц (404) */}
       <Route path="*" element={<NotFoundPage />} />
     </Route>,
   ),

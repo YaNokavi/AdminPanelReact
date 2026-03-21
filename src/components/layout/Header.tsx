@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 
 export default function Header() {
-  const getNavLinkClass = ({ isActive }) =>
+  const getNavLinkClass = ({ isActive }: { isActive: boolean }): string =>
     isActive
       ? "text-primary transition"
       : "text-text-muted hover:text-text-main transition";

@@ -1,17 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-export default function FAQPage() {
-  // Состояние для хранения индекса открытого вопроса (null если все закрыты)
-  const [openIndex, setOpenIndex] = useState(null);
+interface FAQItem {
+  q: string;
+  a: React.ReactNode;
+}
 
-  const toggleFaq = (index) => {
-    // Если кликнули по уже открытому — закрываем, иначе открываем новый
+export default function FAQPage() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  // Явно типизируем индекс как число
+  const toggleFaq = (index: number): void => {
     setOpenIndex(openIndex === index ? null : index);
   };
 
-  // Массив с вопросами и ответами
-  const faqs = [
+  const faqs: FAQItem[] = [
     {
       q: "Что такое CunaEdu?",
       a: "CunaEdu — это учебная платформа. Данная админ-панель предназначена для управления образовательным контентом: создания курсов, модулей, уроков и тестов.",
@@ -34,6 +37,7 @@ export default function FAQPage() {
     },
     {
       q: "Какие типы уроков поддерживаются?",
+      // JSX отлично подходит под тип ReactNode
       a: (
         <>
           В данный момент поддерживаются два типа уроков:
@@ -94,11 +98,10 @@ export default function FAQPage() {
                 </svg>
               </button>
 
-              {/* Условный рендеринг контента */}
               <div className={`px-6 pb-5 ${isOpen ? "block" : "hidden"}`}>
-                <p className="text-text-muted text-sm leading-relaxed">
+                <div className="text-text-muted text-sm leading-relaxed">
                   {faq.a}
-                </p>
+                </div>
               </div>
             </div>
           );

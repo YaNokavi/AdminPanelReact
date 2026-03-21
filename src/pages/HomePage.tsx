@@ -1,26 +1,26 @@
 import { useState } from "react";
-import FileItem from "../components/FileItem";
+import FileItem, { type FileNode } from "../components/FileItem";
 
 export default function HomePage() {
-  const [files, setFiles] = useState([
+  const [files, setFiles] = useState<FileNode[]>([
     { id: 1, name: "Курс по React", type: "directory" },
     { id: 2, name: "Основы JS", type: "directory" },
     { id: 3, name: "index.md", type: "file" },
   ]);
 
-  const [breadcrumbs, setBreadcrumbs] = useState(["Главная"]);
+  const [breadcrumbs, setBreadcrumbs] = useState<string[]>(["Главная"]);
 
-  const handleCreateFile = () => {
+  const handleCreateFile = (): void => {
     const name = prompt("Введите имя файла:");
     if (name) setFiles([...files, { id: Date.now(), name, type: "file" }]);
   };
 
-  const handleCreateDirectory = () => {
+  const handleCreateDirectory = (): void => {
     const name = prompt("Введите имя директории:");
     if (name) setFiles([...files, { id: Date.now(), name, type: "directory" }]);
   };
 
-  const handleOpen = (item) => {
+  const handleOpen = (item: FileNode): void => {
     if (item.type === "directory") {
       setBreadcrumbs([...breadcrumbs, item.name]);
       setFiles([]);
@@ -29,21 +29,22 @@ export default function HomePage() {
     }
   };
 
-  const handleRename = (item) => {
+  const handleRename = (item: FileNode): void => {
     const newName = prompt("Новое имя:", item.name);
-    if (newName)
+    if (newName) {
       setFiles(
         files.map((f) => (f.id === item.id ? { ...f, name: newName } : f)),
       );
+    }
   };
 
-  const handleDelete = (item) => {
+  const handleDelete = (item: FileNode): void => {
     if (window.confirm(`Вы уверены, что хотите удалить ${item.name}?`)) {
       setFiles(files.filter((f) => f.id !== item.id));
     }
   };
 
-  const navigateBack = () => {
+  const navigateBack = (): void => {
     if (breadcrumbs.length > 1) {
       setBreadcrumbs(breadcrumbs.slice(0, -1));
       setFiles([

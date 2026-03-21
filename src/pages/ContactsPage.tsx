@@ -1,8 +1,21 @@
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 
+// Типизация состояния данных формы
+interface FormData {
+  name: string;
+  email: string;
+  topic: string;
+  message: string;
+  consent: boolean;
+}
+
+// Типизация состояния ошибок формы (все поля могут быть строкой с текстом ошибки или undefined)
+// Используем Partial, чтобы сделать все поля необязательными
+type FormErrors = Partial<Record<keyof FormData, string | null>>;
+
 export default function ContactsPage() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: "",
     email: "",
     topic: "",
@@ -10,24 +23,32 @@ export default function ContactsPage() {
     consent: false,
   });
 
-  const [errors, setErrors] = useState({});
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  // Типизируем событие изменения (поддерживает input, select и textarea)
+  const handleChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
+  ): void => {
+    // Явно приводим type и checked, так как они есть только у HTMLInputElement
+    const target = e.target as HTMLInputElement;
+    const { name, value, type, checked } = target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
-    // Очищаем ошибку при вводе (аналог removeError в твоем JS)
-    if (errors[name]) {
+
+    // Очищаем ошибку при вводе
+    if (errors[name as keyof FormData]) {
       setErrors((prev) => ({ ...prev, [name]: null }));
     }
   };
 
-  const handleSubmit = (e) => {
+  // Типизируем событие отправки формы
+  const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
-    const newErrors = {};
+    const newErrors: FormErrors = {};
     let isValid = true;
 
     // Валидация имени
@@ -77,7 +98,8 @@ export default function ContactsPage() {
     }
   };
 
-  const inputClass = (fieldName) =>
+  // Типизируем параметр fieldName как ключ интерфейса FormData
+  const inputClass = (fieldName: keyof FormData): string =>
     `w-full p-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
       errors[fieldName]
         ? "border-red-500 focus:border-red-500"
@@ -193,7 +215,7 @@ export default function ContactsPage() {
                 <textarea
                   id="message"
                   name="message"
-                  rows="5"
+                  rows={5}
                   value={formData.message}
                   onChange={handleChange}
                   className={`${inputClass("message")} resize-y`}
@@ -263,7 +285,7 @@ export default function ContactsPage() {
                   <p className="text-sm font-medium text-text-heading">Email</p>
                   <a
                     className="text-sm text-primary hover:text-primary-hover transition"
-                    href="mailto:support@cunaedu.online"
+                    href="mailto:cunaedu_support@mail.ru"
                   >
                     cunaedu_support@mail.ru
                   </a>

@@ -1,6 +1,22 @@
-import React from "react";
+export interface FileNode {
+  id: number | string;
+  name: string;
+  type: "file" | "directory";
+}
 
-export default function FileItem({ item, onOpen, onRename, onDelete }) {
+interface FileItemProps {
+  item: FileNode;
+  onOpen: (item: FileNode) => void;
+  onRename: (item: FileNode) => void;
+  onDelete: (item: FileNode) => void;
+}
+
+export default function FileItem({
+  item,
+  onOpen,
+  onRename,
+  onDelete,
+}: FileItemProps) {
   // Определяем иконку в зависимости от типа
   const isDirectory = item.type === "directory";
 
