@@ -6,14 +6,13 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from "react";
+import { useNavigate } from "react-router-dom";
 import FileItem, { type NavItem, type ItemKind } from "../components/FileItem";
 import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ToastContainer from "../components/ToastContainer";
 import { useToast } from "../hooks/useToast";
-import {
-  fetchCourses,
-} from "../api/courses";
+import { fetchCourses } from "../api/courses";
 import type { Course } from "../api/courses";
 import {
   createCourse,
@@ -23,6 +22,7 @@ import {
   createImage,
   generateMigration,
 } from "../api/mutations";
+import type { StepEditorState } from "./StepEditorPage";
 
 export interface BreadcrumbItem {
   label: string;
@@ -133,6 +133,7 @@ function Field({
 
 export default function HomePage() {
   const toast = useToast();
+  const navigate = useNavigate();
 
   // ── navigation state ──────────────────────────────────────────────────────
   const [allCourses, setAllCourses] = useState<NavItem[]>([]);
@@ -165,12 +166,25 @@ export default function HomePage() {
 
   // ── navigation ────────────────────────────────────────────────────────────
   const navigateTo = (item: NavItem) => {
+    // Клик на шаг → открываем редактор
+    if (item.kind === "step") {
+      const state: StepEditorState = {
+        stepId: item.id as number,
+        stepNumber: item.number ?? (item.id as number),
+        isTest: item.isTest ?? false,
+        contentUrl: item.contentUrl ?? "",
+        submodulePath: buildPath(breadcrumbs),
+      };
+      navigate("/step-editor", { state });
+      return;
+    }
+
     const children = getChildItems(item);
     const childKind = getChildKind(item);
     setBreadcrumbs((prev) => [
       ...prev,
       {
-        label: item.kind === "step" ? `Шаг ${item.number ?? item.id}` : item.name,
+        label: item.name,
         items: children,
         kind: childKind,
         path: String(item.id),
@@ -190,8 +204,6 @@ export default function HomePage() {
     if (!confirmItem) return;
     setDeleteLoading(true);
     try {
-      // Only course-level delete is implemented via API rename/delete;
-      // для шагов отдельный flow будет в редакторе шагов
       toast.info("Удаление пока доступно только из редактора шагов");
     } finally {
       setDeleteLoading(false);
@@ -276,7 +288,7 @@ export default function HomePage() {
     }
   };
 
-  // ── create directory modal (module / submodule) ───────────────────────────
+  // ── create directory modal ────────────────────────────────────────────────
   const [showCreateDir, setShowCreateDir] = useState(false);
   const [cdName, setCdName] = useState("");
   const [cdLoading, setCdLoading] = useState(false);
