@@ -9,6 +9,7 @@ import ContactsPage from "../pages/ContactsPage";
 import FAQPage from "../pages/FAQPage";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
+import StepEditorPage from "../pages/StepEditorPage";
 import RequireAuth from "../components/RequireAuth";
 
 export const router = createHashRouter(
@@ -26,6 +27,7 @@ export const router = createHashRouter(
         <Route index element={<HomePage />} />
         <Route path="faq" element={<FAQPage />} />
         <Route path="contacts" element={<ContactsPage />} />
+        <Route path="step-editor" element={<StepEditorPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </>,
