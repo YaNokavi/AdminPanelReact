@@ -56,7 +56,7 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="flex-1 max-w-5xl w-full mx-auto ">
       {/* Hero-секция с заголовком и кнопкой создания курса */}
       <section className="bg-white rounded-xl shadow-sm border border-border p-6 sm:p-8 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -91,7 +91,7 @@ export default function HomePage() {
       </section>
 
       {/* Секция с информационными карточками */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
         {/* Иерархия */}
         <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
           <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">

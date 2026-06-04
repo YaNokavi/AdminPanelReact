@@ -7,7 +7,7 @@ export default function Layout() {
     <div className="flex flex-col min-h-screen bg-surface text-text-main">
       <Header />
 
-      <main className="flex-grow flex flex-col items-center pt-8 pb-16 px-4">
+      <main className="flex-grow flex flex-col items-center p-6">
         <Outlet />
       </main>
 
