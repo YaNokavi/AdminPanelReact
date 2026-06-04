@@ -1,372 +1,664 @@
-import { useState } from "react";
-import FileItem, { type FileNode } from "../components/FileItem";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type ChangeEvent,
+  type DragEvent,
+} from "react";
+import FileItem, { type NavItem, type ItemKind } from "../components/FileItem";
+import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
+import ToastContainer from "../components/ToastContainer";
+import { useToast } from "../hooks/useToast";
+import {
+  fetchCourses,
+} from "../api/courses";
+import type { Course } from "../api/courses";
+import {
+  createCourse,
+  editCourse,
+  createDirectory,
+  renameItem,
+  createImage,
+  generateMigration,
+} from "../api/mutations";
+
+export interface BreadcrumbItem {
+  label: string;
+  items: NavItem[];
+  kind: ItemKind;
+  path: string;
+}
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function courseToNavItem(c: Course): NavItem {
+  return {
+    id: c.id,
+    name: c.name,
+    kind: "course",
+    icon: c.icon,
+    author: c.author,
+    description: c.description,
+    rating: c.rating,
+    modules: c.modules?.map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: "module" as ItemKind,
+      submodules: m.submodules?.map((s) => ({
+        id: s.id,
+        name: s.name,
+        kind: "submodule" as ItemKind,
+        steps: s.steps?.map((st) => ({
+          id: st.id,
+          name: `Шаг ${st.number}`,
+          kind: "step" as ItemKind,
+          isTest: st.is_test,
+          number: st.number,
+          contentUrl: st.content_url,
+        })) ?? [],
+      })) ?? [],
+    })) ?? [],
+  };
+}
+
+function getChildItems(item: NavItem): NavItem[] {
+  if (item.kind === "course") return item.modules ?? [];
+  if (item.kind === "module") return item.submodules ?? [];
+  if (item.kind === "submodule") return item.steps ?? [];
+  return [];
+}
+
+function getChildKind(item: NavItem): ItemKind {
+  if (item.kind === "course") return "module";
+  if (item.kind === "module") return "submodule";
+  return "step";
+}
+
+function buildPath(crumbs: BreadcrumbItem[]): string {
+  return crumbs
+    .filter((c) => c.path !== "")
+    .map((c) => c.path)
+    .join("/");
+}
+
+// ── field component ──────────────────────────────────────────────────────────
+
+function Field({
+  label,
+  id,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  required,
+  min,
+  max,
+  textarea,
+}: {
+  label: string;
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  textarea?: boolean;
+}) {
+  const cls =
+    "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-text-heading mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {textarea ? (
+        <textarea id={id} className={cls} rows={3} value={value}
+          placeholder={placeholder} required={required}
+          onChange={(e) => onChange(e.target.value)} />
+      ) : (
+        <input id={id} type={type} className={cls} value={value}
+          placeholder={placeholder} required={required}
+          min={min} max={max}
+          onChange={(e) => onChange(e.target.value)} />
+      )}
+    </div>
+  );
+}
+
+// ── main component ────────────────────────────────────────────────────────────
 
 export default function HomePage() {
-  const [files, setFiles] = useState<FileNode[]>([
-    { id: 1, name: "Курс по React", type: "directory" },
-    { id: 2, name: "Основы JS", type: "directory" },
-    { id: 3, name: "index.md", type: "file" },
+  const toast = useToast();
+
+  // ── navigation state ──────────────────────────────────────────────────────
+  const [allCourses, setAllCourses] = useState<NavItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
+    { label: "Главная", items: [], kind: "course", path: "" },
   ]);
 
-  const [breadcrumbs, setBreadcrumbs] = useState<string[]>(["Главная"]);
+  const currentItems = breadcrumbs[breadcrumbs.length - 1].items.length
+    ? breadcrumbs[breadcrumbs.length - 1].items
+    : allCourses;
 
-  const handleCreateFile = (): void => {
-    const name = prompt("Введите имя файла:");
-    if (name) setFiles([...files, { id: Date.now(), name, type: "file" }]);
+  const currentLevel = breadcrumbs[breadcrumbs.length - 1].kind;
+  const isRoot = breadcrumbs.length === 1;
+
+  // ── load courses ──────────────────────────────────────────────────────────
+  const loadCourses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await fetchCourses();
+      setAllCourses(data.map(courseToNavItem));
+    } catch {
+      toast.error("Не удалось загрузить курсы");
+    } finally {
+      setLoading(false);
+    }
+  }, []); // eslint-disable-line
+
+  useEffect(() => { loadCourses(); }, [loadCourses]);
+
+  // ── navigation ────────────────────────────────────────────────────────────
+  const navigateTo = (item: NavItem) => {
+    const children = getChildItems(item);
+    const childKind = getChildKind(item);
+    setBreadcrumbs((prev) => [
+      ...prev,
+      {
+        label: item.kind === "step" ? `Шаг ${item.number ?? item.id}` : item.name,
+        items: children,
+        kind: childKind,
+        path: String(item.id),
+      },
+    ]);
   };
 
-  const handleCreateDirectory = (): void => {
-    const name = prompt("Введите имя директории:");
-    if (name) setFiles([...files, { id: Date.now(), name, type: "directory" }]);
+  const navigateToCrumb = (index: number) => {
+    setBreadcrumbs((prev) => prev.slice(0, index + 1));
   };
 
-  const handleOpen = (item: FileNode): void => {
-    if (item.type === "directory") {
-      setBreadcrumbs([...breadcrumbs, item.name]);
-      setFiles([]);
-    } else {
-      alert(`Открытие файла: ${item.name}`);
+  // ── delete confirm ────────────────────────────────────────────────────────
+  const [confirmItem, setConfirmItem] = useState<NavItem | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmItem) return;
+    setDeleteLoading(true);
+    try {
+      // Only course-level delete is implemented via API rename/delete;
+      // для шагов отдельный flow будет в редакторе шагов
+      toast.info("Удаление пока доступно только из редактора шагов");
+    } finally {
+      setDeleteLoading(false);
+      setConfirmItem(null);
     }
   };
 
-  const handleRename = (item: FileNode): void => {
-    const newName = prompt("Новое имя:", item.name);
-    if (newName) {
-      setFiles(
-        files.map((f) => (f.id === item.id ? { ...f, name: newName } : f)),
-      );
+  // ── create course modal ───────────────────────────────────────────────────
+  const [showCreateCourse, setShowCreateCourse] = useState(false);
+  const [ccName, setCcName] = useState("");
+  const [ccAuthor, setCcAuthor] = useState("");
+  const [ccDesc, setCcDesc] = useState("");
+  const [ccIcon, setCcIcon] = useState("");
+  const [ccRating, setCcRating] = useState("5");
+  const [ccLoading, setCcLoading] = useState(false);
+
+  const handleCreateCourse = async () => {
+    if (!ccName.trim() || !ccAuthor.trim() || !ccDesc.trim()) {
+      toast.error("Заполните обязательные поля");
+      return;
+    }
+    setCcLoading(true);
+    try {
+      await createCourse({
+        name: ccName,
+        author: ccAuthor,
+        description: ccDesc,
+        icon: ccIcon,
+        message: "Create course via admin panel",
+      });
+      toast.success("Курс успешно создан");
+      setShowCreateCourse(false);
+      setCcName(""); setCcAuthor(""); setCcDesc(""); setCcIcon(""); setCcRating("5");
+      loadCourses();
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Не удалось создать курс");
+    } finally {
+      setCcLoading(false);
     }
   };
 
-  const handleDelete = (item: FileNode): void => {
-    if (window.confirm(`Вы уверены, что хотите удалить ${item.name}?`)) {
-      setFiles(files.filter((f) => f.id !== item.id));
+  // ── edit course modal ─────────────────────────────────────────────────────
+  const [editTarget, setEditTarget] = useState<NavItem | null>(null);
+  const [ecName, setEcName] = useState("");
+  const [ecAuthor, setEcAuthor] = useState("");
+  const [ecDesc, setEcDesc] = useState("");
+  const [ecIcon, setEcIcon] = useState("");
+  const [ecRating, setEcRating] = useState("5");
+  const [ecLoading, setEcLoading] = useState(false);
+
+  const openEditCourse = (item: NavItem) => {
+    setEditTarget(item);
+    setEcName(item.name);
+    setEcAuthor(item.author ?? "");
+    setEcDesc(item.description ?? "");
+    setEcIcon(item.icon ?? "");
+    setEcRating(String(item.rating ?? 5));
+  };
+
+  const handleEditCourse = async () => {
+    if (!editTarget) return;
+    if (!ecName.trim() || !ecAuthor.trim() || !ecDesc.trim()) {
+      toast.error("Заполните обязательные поля");
+      return;
+    }
+    setEcLoading(true);
+    try {
+      await editCourse({
+        id: editTarget.id as number,
+        name: ecName,
+        author: ecAuthor,
+        description: ecDesc,
+        icon: ecIcon,
+      });
+      toast.success("Курс успешно отредактирован");
+      setEditTarget(null);
+      loadCourses();
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Не удалось отредактировать курс");
+    } finally {
+      setEcLoading(false);
     }
   };
 
-  const navigateBack = (): void => {
-    if (breadcrumbs.length > 1) {
-      setBreadcrumbs(breadcrumbs.slice(0, -1));
-      setFiles([
-        { id: 1, name: "Курс по React", type: "directory" },
-        { id: 2, name: "Основы JS", type: "directory" },
-        { id: 3, name: "index.md", type: "file" },
-      ]);
+  // ── create directory modal (module / submodule) ───────────────────────────
+  const [showCreateDir, setShowCreateDir] = useState(false);
+  const [cdName, setCdName] = useState("");
+  const [cdLoading, setCdLoading] = useState(false);
+
+  const dirKind: "module" | "submodule" =
+    currentLevel === "module" ? "module" : "submodule";
+
+  const handleCreateDir = async () => {
+    if (!cdName.trim()) { toast.error("Введите имя"); return; }
+    setCdLoading(true);
+    const path = buildPath(breadcrumbs);
+    try {
+      await createDirectory({
+        path: `${path}/${cdName}`,
+        type: dirKind,
+        message: `Create ${dirKind} via admin panel`,
+      });
+      toast.success(`${dirKind === "module" ? "Модуль" : "Подмодуль"} создан`);
+      setShowCreateDir(false);
+      setCdName("");
+      loadCourses();
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка создания");
+    } finally {
+      setCdLoading(false);
     }
   };
 
+  // ── rename modal ──────────────────────────────────────────────────────────
+  const [renameTarget, setRenameTarget] = useState<NavItem | null>(null);
+  const [rnName, setRnName] = useState("");
+  const [rnLoading, setRnLoading] = useState(false);
+
+  const openRename = (item: NavItem) => {
+    setRenameTarget(item);
+    setRnName(item.name);
+  };
+
+  const handleRename = async () => {
+    if (!renameTarget || !rnName.trim() || rnName === renameTarget.name) {
+      toast.info("Нет изменений");
+      return;
+    }
+    setRnLoading(true);
+    const path = `${buildPath(breadcrumbs)}/${renameTarget.id}`;
+    const fileTypeName =
+      renameTarget.kind === "course" ? "course" :
+      renameTarget.kind === "module" ? "module" : "submodule";
+    try {
+      await renameItem({ path, fileTypeName, newName: rnName });
+      toast.success("Переименовано");
+      setRenameTarget(null);
+      loadCourses();
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка переименования");
+    } finally {
+      setRnLoading(false);
+    }
+  };
+
+  // ── image upload ──────────────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+
+  const handleImageFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Только изображения");
+      return;
+    }
+    setUploadLoading(true);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = (e.target?.result as string).split(",")[1];
+      const path = `${buildPath(breadcrumbs)}/${file.name}`;
+      try {
+        await createImage({ path, content: base64, message: "Upload image via admin panel" });
+        toast.success("Изображение загружено");
+      } catch (err: unknown) {
+        toast.error((err as Error).message ?? "Ошибка загрузки");
+      } finally {
+        setUploadLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [breadcrumbs]); // eslint-disable-line
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageFile(file);
+  };
+
+  const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleImageFile(file);
+  };
+
+  // ── generate migration ────────────────────────────────────────────────────
+  const [migLoading, setMigLoading] = useState(false);
+
+  const handleGenerateMigration = async () => {
+    setMigLoading(true);
+    try {
+      const sql = await generateMigration();
+      const blob = new Blob([sql], { type: "application/sql" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "migration.sql";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Миграция сгенерирована");
+    } catch {
+      toast.error("Не удалось сгенерировать миграцию");
+    } finally {
+      setMigLoading(false);
+    }
+  };
+
+  // ── what buttons to show ──────────────────────────────────────────────────
+  const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
+  const isAtStep = currentLevel === "step";
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 max-w-5xl w-full mx-auto ">
-      {/* Hero-секция с заголовком и кнопкой создания курса */}
+    <div className="flex-1 max-w-5xl w-full mx-auto">
+      <ToastContainer toasts={toast.toasts} />
+
+      {/* Hero */}
       <section className="bg-white rounded-xl shadow-sm border border-border p-6 sm:p-8 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-text-heading mb-2">
-              Управление курсами
-            </h1>
-            <p className="text-text-muted text-sm sm:text-base leading-relaxed">
-              Создавайте учебные материалы, редактируйте контент и генерируйте
-              миграции для внедрения курсов в приложение.
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-heading mb-2">Управление курсами</h1>
+            <p className="text-text-muted text-sm leading-relaxed">
+              Создавайте учебные материалы, редактируйте контент и генерируйте миграции.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 4v16m8-8H4"
-                ></path>
+          {isRoot && (
+            <button
+              onClick={() => setShowCreateCourse(true)}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
               Создать курс
             </button>
-          </div>
+          )}
         </div>
       </section>
 
-      {/* Секция с информационными карточками */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-        {/* Иерархия */}
-        <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              ></path>
-            </svg>
+      {/* Info cards */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {[
+          { bg: "bg-blue-50", color: "text-primary", label: "Иерархия", sub: "Курс → Модуль → Подмодуль → Шаг",
+            icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+          { bg: "bg-green-50", color: "text-green-600", label: "Git-хранение", sub: "Контент версионируется в GitHub",
+            icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
+          { bg: "bg-purple-50", color: "text-purple-600", label: "Курсов загружено", sub: loading ? "Загрузка..." : `${allCourses.length} курс(ов)`,
+            icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" },
+        ].map((c) => (
+          <div key={c.label} className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
+            <div className={`w-10 h-10 ${c.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+              <svg className={`w-5 h-5 ${c.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={c.icon} />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-text-heading">{c.label}</p>
+              <p className="text-xs text-text-muted mt-1">{c.sub}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold text-text-heading">Иерархия</p>
-            <p className="text-xs text-text-muted mt-1">
-              Курс → Модуль → Подмодуль → Шаг
-            </p>
-          </div>
-        </div>
-
-        {/* Git-хранение */}
-        <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-              ></path>
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-text-heading">
-              Git-хранение
-            </p>
-            <p className="text-xs text-text-muted mt-1">
-              Контент версионируется в GitHub
-            </p>
-          </div>
-        </div>
-
-        {/* Миграции */}
-        <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-          <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-            <svg
-              className="w-5 h-5 text-purple-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m-4-3.122V11m-5.828 3.031l.034.024m4.55-4.004l-.034.024m-4.55 4.004v-.001m4.55-4.004v-.001"
-              ></path>
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-text-heading">Миграции</p>
-            <p className="text-xs text-text-muted mt-1">
-              Автогенерация SQL для основной БД
-            </p>
-          </div>
-        </div>
+        ))}
       </section>
 
-      {/* Секция файловой системы (Drop-zone + Список) */}
-      <section className="bg-white rounded-xl shadow-sm border border-border p-6 mb-6">
-        {/* Drop zone из оригинала */}
-        <div className="border-2 border-dashed border-gray-300 hover:border-primary rounded-lg p-6 text-center text-text-muted text-sm cursor-pointer transition mb-5 hover:bg-blue-50/30">
-          <svg
-            className="w-8 h-8 mx-auto mb-2 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-            ></path>
+      {/* File section */}
+      <section className="bg-white rounded-xl shadow-sm border border-border p-6 mb-24">
+        {/* Drop zone */}
+        <div
+          className={`border-2 border-dashed rounded-lg p-5 text-center text-text-muted text-sm cursor-pointer transition mb-5 ${
+            dragOver ? "border-primary bg-blue-50/40" : "border-gray-300 hover:border-primary hover:bg-blue-50/20"
+          } ${uploadLoading ? "opacity-50 pointer-events-none" : ""}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <svg className="w-7 h-7 mx-auto mb-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          Перетащите изображение сюда или нажмите для выбора файла
-          <input accept="image/*" className="hidden" type="file" />
+          {uploadLoading ? "Загрузка..." : "Перетащите изображение или нажмите для выбора"}
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
         </div>
 
-        {/* Кнопки создания файлов из оригинала */}
+        {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-5">
-          <button
-            onClick={handleCreateFile}
-            className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {canCreateDir && (
+            <button
+              onClick={() => setShowCreateDir(true)}
+              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              ></path>
-            </svg>
-            Создать файл
-          </button>
-          <button
-            onClick={handleCreateDirectory}
-            className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
-              ></path>
-            </svg>
-            Создать директорию
-          </button>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+              </svg>
+              Создать {dirKind === "module" ? "модуль" : "подмодуль"}
+            </button>
+          )}
+          {isAtStep && (
+            <span className="text-xs text-text-muted self-center">
+              Нажмите на шаг, чтобы открыть редактор
+            </span>
+          )}
         </div>
 
-        {/* Хлебные крошки */}
-        <div className="text-sm text-text-muted mb-3 flex items-center gap-2">
-          {breadcrumbs.map((crumb, index) => (
-            <span key={index} className="flex items-center gap-2">
-              {index > 0 && <span className="text-gray-400">/</span>}
-              <span
-                className={`cursor-pointer ${index === breadcrumbs.length - 1 ? "font-medium text-text-heading" : "hover:text-primary"}`}
-                onClick={() => index < breadcrumbs.length - 1 && navigateBack()}
+        {/* Breadcrumbs */}
+        <nav className="flex items-center flex-wrap gap-1 text-sm mb-4">
+          {breadcrumbs.map((crumb, i) => (
+            <span key={i} className="flex items-center gap-1">
+              {i > 0 && <span className="text-gray-300">/</span>}
+              <button
+                onClick={() => navigateToCrumb(i)}
+                className={`px-1.5 py-0.5 rounded transition ${
+                  i === breadcrumbs.length - 1
+                    ? "font-semibold text-text-heading cursor-default"
+                    : "text-text-muted hover:text-primary hover:bg-blue-50"
+                }`}
               >
-                {crumb}
-              </span>
+                {crumb.label}
+              </button>
             </span>
           ))}
+        </nav>
+
+        {/* List */}
+        <div className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">
+          {loading && isRoot ? "Загрузка..." : `Содержимое · ${currentItems.length} элем.`}
         </div>
 
-        {/* Список файлов (интеграция твоего FileItem) */}
-        <div className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">
-          Содержимое
-        </div>
-        {files.length === 0 ? (
-          <div className="text-center py-8 text-gray-400 border border-dashed rounded-lg">
-            Папка пуста
+        {loading && isRoot ? (
+          <div className="flex items-center justify-center py-12 text-text-muted">
+            <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Загрузка курсов...
+          </div>
+        ) : currentItems.length === 0 ? (
+          <div className="text-center py-10 text-gray-400 border border-dashed rounded-lg text-sm">
+            Пусто
           </div>
         ) : (
           <ul className="space-y-1.5">
-            {files.map((item) => (
+            {currentItems.map((item) => (
               <FileItem
                 key={item.id}
                 item={item}
-                onOpen={handleOpen}
-                onRename={handleRename}
-                onDelete={handleDelete}
+                breadcrumb={breadcrumbs}
+                onOpen={navigateTo}
+                onRename={item.kind !== "step" ? openRename : undefined}
+                onDelete={() => setConfirmItem(item)}
+                onEdit={item.kind === "course" ? openEditCourse : undefined}
               />
             ))}
           </ul>
         )}
       </section>
 
-      {/* Кнопка генерации миграции (плавающая) */}
-      <button className="fixed bottom-[60px] right-[15px] bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 z-40">
-        <svg
-          className="w-5 h-5"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
-          ></path>
-        </svg>
-        Сгенерировать миграцию
+      {/* Floating migration button */}
+      <button
+        onClick={handleGenerateMigration}
+        disabled={migLoading}
+        className="fixed bottom-6 right-6 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 z-40"
+      >
+        {migLoading ? (
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+              d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+          </svg>
+        )}
+        {migLoading ? "Генерация..." : "Сгенерировать миграцию"}
       </button>
+
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+
+      {/* Create course */}
+      <Modal open={showCreateCourse} title="Создать курс"
+        onClose={() => setShowCreateCourse(false)}
+        footer={
+          <>
+            <button onClick={() => setShowCreateCourse(false)} disabled={ccLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
+            <button onClick={handleCreateCourse} disabled={ccLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+              {ccLoading ? "Создание..." : "Создать"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Название" id="cc-name" value={ccName} onChange={setCcName} required placeholder="Технический анализ" />
+          <Field label="Автор" id="cc-author" value={ccAuthor} onChange={setCcAuthor} required placeholder="Иван Иванов" />
+          <Field label="Описание" id="cc-desc" value={ccDesc} onChange={setCcDesc} required textarea placeholder="Краткое описание курса" />
+          <Field label="URL иконки" id="cc-icon" value={ccIcon} onChange={setCcIcon} placeholder="https://..." />
+          <Field label="Рейтинг" id="cc-rating" type="number" value={ccRating} onChange={setCcRating} min={1} max={5} />
+        </div>
+      </Modal>
+
+      {/* Edit course */}
+      <Modal open={!!editTarget} title="Редактировать курс"
+        onClose={() => setEditTarget(null)}
+        footer={
+          <>
+            <button onClick={() => setEditTarget(null)} disabled={ecLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
+            <button onClick={handleEditCourse} disabled={ecLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+              {ecLoading ? "Сохранение..." : "Сохранить"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Название" id="ec-name" value={ecName} onChange={setEcName} required />
+          <Field label="Автор" id="ec-author" value={ecAuthor} onChange={setEcAuthor} required />
+          <Field label="Описание" id="ec-desc" value={ecDesc} onChange={setEcDesc} required textarea />
+          <Field label="URL иконки" id="ec-icon" value={ecIcon} onChange={setEcIcon} />
+          <Field label="Рейтинг" id="ec-rating" type="number" value={ecRating} onChange={setEcRating} min={1} max={5} />
+        </div>
+      </Modal>
+
+      {/* Create directory */}
+      <Modal open={showCreateDir} title={`Создать ${dirKind === "module" ? "модуль" : "подмодуль"}`}
+        onClose={() => setShowCreateDir(false)}
+        footer={
+          <>
+            <button onClick={() => setShowCreateDir(false)} disabled={cdLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
+            <button onClick={handleCreateDir} disabled={cdLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+              {cdLoading ? "Создание..." : "Создать"}
+            </button>
+          </>
+        }
+      >
+        <Field label="Название" id="cd-name" value={cdName} onChange={setCdName} required
+          placeholder={dirKind === "module" ? "Введение" : "Урок 1"} />
+      </Modal>
+
+      {/* Rename */}
+      <Modal open={!!renameTarget} title="Переименовать"
+        onClose={() => setRenameTarget(null)}
+        footer={
+          <>
+            <button onClick={() => setRenameTarget(null)} disabled={rnLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
+            <button onClick={handleRename} disabled={rnLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+              {rnLoading ? "Сохранение..." : "Переименовать"}
+            </button>
+          </>
+        }
+      >
+        <Field label="Новое имя" id="rn-name" value={rnName} onChange={setRnName} required />
+      </Modal>
+
+      {/* Delete confirm */}
+      <ConfirmDialog
+        open={!!confirmItem}
+        message={`Удалить «${confirmItem?.name ?? ""}»? Это действие необратимо.`}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setConfirmItem(null)}
+        loading={deleteLoading}
+      />
     </div>
   );
 }
-
-// {/* Секция статистики */}
-//       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-//         <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-//           <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-//             <svg
-//               className="w-5 h-5 text-primary"
-//               fill="none"
-//               stroke="currentColor"
-//               viewBox="0 0 24 24"
-//             >
-//               <path
-//                 strokeLinecap="round"
-//                 strokeLinejoin="round"
-//                 strokeWidth="2"
-//                 d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-//               ></path>
-//             </svg>
-//           </div>
-//           <div>
-//             <p className="text-sm font-medium text-text-muted mb-1">
-//               Всего курсов
-//             </p>
-//             <p className="text-2xl font-bold text-text-heading">
-//               {courses.length}
-//             </p>
-//           </div>
-//         </div>
-
-//         {/* Карточка 2: Объем данных */}
-//         <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-//           <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
-//             <svg
-//               className="w-5 h-5 text-green-600"
-//               fill="none"
-//               stroke="currentColor"
-//               viewBox="0 0 24 24"
-//             >
-//               <path
-//                 strokeLinecap="round"
-//                 strokeLinejoin="round"
-//                 strokeWidth="2"
-//                 d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m-4-3.122V11m-5.828 3.031l.034.024m4.55-4.004l-.034.024m-4.55 4.004v-.001m4.55-4.004v-.001"
-//               ></path>
-//             </svg>
-//           </div>
-//           <div>
-//             <p className="text-sm font-medium text-text-muted mb-1">
-//               Общий объем
-//             </p>
-//             <p className="text-2xl font-bold text-text-heading">0.0 МБ</p>
-//           </div>
-//         </div>
-
-//         {/* Карточка 3: Последнее обновление */}
-//         <div className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-//           <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center flex-shrink-0">
-//             <svg
-//               className="w-5 h-5 text-purple-600"
-//               fill="none"
-//               stroke="currentColor"
-//               viewBox="0 0 24 24"
-//             >
-//               <path
-//                 strokeLinecap="round"
-//                 strokeLinejoin="round"
-//                 strokeWidth="2"
-//                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-//               ></path>
-//             </svg>
-//           </div>
-//           <div>
-//             <p className="text-sm font-medium text-text-muted mb-1">
-//               Обновлено
-//             </p>
-//             <p className="text-2xl font-bold text-text-heading">Только что</p>
-//           </div>
-//         </div>
-//       </section>
