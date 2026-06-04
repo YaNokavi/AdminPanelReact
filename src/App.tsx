@@ -1,8 +1,5 @@
-import { router } from "./providers/router.js";
-import { RouterProvider } from "react-router-dom";
-
-function App() {
-  return <RouterProvider router={router} />;
+// App.tsx is now a thin wrapper — routing and auth are handled in main.tsx
+// Kept for compatibility if needed.
+export default function App() {
+  return null;
 }
-
-export default App;
