@@ -3,9 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import TiptapEditor from "../components/TiptapEditor";
 import TestEditor, { type TestData } from "../components/TestEditor";
 import ToastContainer from "../components/ToastContainer";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { fetchFileContent } from "../api/courses";
-import { updateFile, editStep, createFile } from "../api/mutations";
+import { updateFile, editStep, createFile, deleteFile } from "../api/mutations";
 
 export interface StepEditorState {
   stepId: number;
@@ -22,7 +23,7 @@ export default function StepEditorPage() {
 
   const state = location.state as StepEditorState | null;
 
-  // ── Guard ────────────────────────────────────────────────────────────────
+  // ── Guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!state) navigate("/", { replace: true });
   }, []); // eslint-disable-line
@@ -34,6 +35,10 @@ export default function StepEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  // ── Delete state ──────────────────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // ── Load content ─────────────────────────────────────────────────────────
   const loadContent = useCallback(async () => {
@@ -62,7 +67,7 @@ export default function StepEditorPage() {
 
   useEffect(() => { loadContent(); }, [loadContent]);
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
@@ -89,7 +94,6 @@ export default function StepEditorPage() {
       }
       toast.success("Шаг сохранён");
       setDirty(false);
-      // refresh sha
       await loadContent();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка сохранения");
@@ -98,7 +102,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ───────────────────────────────────────────────────
+  // ── Toggle test/theory ──────────────────────────────────────────────────
   const handleToggleType = async () => {
     if (!state) return;
     const newIsTest = !isTest;
@@ -109,6 +113,27 @@ export default function StepEditorPage() {
       setDirty(true);
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка смены типа");
+    }
+  };
+
+  // ── Delete step ─────────────────────────────────────────────────────────
+  const handleDeleteStep = async () => {
+    if (!state) return;
+    setDeleting(true);
+    const filePath = `${state.submodulePath}/${state.stepId}.txt`;
+    try {
+      await deleteFile({
+        stepId: state.stepId,
+        path: filePath,
+        message: `Delete step ${state.stepId} via admin panel`,
+        sha: fileSha,
+      });
+      toast.success("Шаг удалён");
+      navigate("/", { replace: true });
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка удаления");
+      setDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -170,6 +195,19 @@ export default function StepEditorPage() {
           <span className="text-xs text-orange-500 font-medium">Несохранённые изменения</span>
         )}
 
+        {/* Delete button */}
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={loading || deleting}
+          className="p-1.5 text-text-muted hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
+          title="Удалить шаг"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+
         <button
           onClick={handleSave}
           disabled={saving || loading}
@@ -211,6 +249,15 @@ export default function StepEditorPage() {
           />
         )}
       </div>
+
+      {/* Delete confirm dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        message={`Удалить «Шаг ${state.stepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
+        onConfirm={handleDeleteStep}
+        onCancel={() => setShowDeleteConfirm(false)}
+        loading={deleting}
+      />
     </div>
   );
 }
