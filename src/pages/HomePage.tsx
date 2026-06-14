@@ -23,6 +23,7 @@ import {
   generateMigration,
   createFile,
   deleteFile,
+  deleteDirectory,
 } from "../api/mutations";
 import type { StepEditorState } from "./StepEditorPage";
 
@@ -33,7 +34,7 @@ export interface BreadcrumbItem {
   path: string;
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function courseToNavItem(c: Course): NavItem {
   return {
@@ -85,47 +86,41 @@ function buildPath(crumbs: BreadcrumbItem[]): string {
     .join("/");
 }
 
-// ── field component ──────────────────────────────────────────────────────────
+/** Подсчёт шагов внутри элемента для предупреждения */
+function countSteps(item: NavItem): number {
+  if (item.kind === "step") return 1;
+  if (item.kind === "submodule") return (item.steps ?? []).length;
+  if (item.kind === "module")
+    return (item.submodules ?? []).reduce((s, sm) => s + (sm.steps ?? []).length, 0);
+  if (item.kind === "course")
+    return (item.modules ?? []).reduce(
+      (s, m) => s + (m.submodules ?? []).reduce((ss, sm) => ss + (sm.steps ?? []).length, 0),
+      0,
+    );
+  return 0;
+}
+
+// ── field component ───────────────────────────────────────────────────────────
 
 function Field({
-  label,
-  id,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  required,
-  min,
-  max,
-  textarea,
+  label, id, value, onChange, type = "text", placeholder, required, min, max, textarea,
 }: {
-  label: string;
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  min?: number;
-  max?: number;
-  textarea?: boolean;
+  label: string; id: string; value: string; onChange: (v: string) => void;
+  type?: string; placeholder?: string; required?: boolean;
+  min?: number; max?: number; textarea?: boolean;
 }) {
-  const cls =
-    "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
+  const cls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
   return (
     <div>
       <label htmlFor={id} className="block text-sm font-medium text-text-heading mb-1">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {textarea ? (
-        <textarea id={id} className={cls} rows={3} value={value}
-          placeholder={placeholder} required={required}
-          onChange={(e) => onChange(e.target.value)} />
+        <textarea id={id} className={cls} rows={3} value={value} placeholder={placeholder}
+          required={required} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input id={id} type={type} className={cls} value={value}
-          placeholder={placeholder} required={required}
-          min={min} max={max}
-          onChange={(e) => onChange(e.target.value)} />
+        <input id={id} type={type} className={cls} value={value} placeholder={placeholder}
+          required={required} min={min} max={max} onChange={(e) => onChange(e.target.value)} />
       )}
     </div>
   );
@@ -137,7 +132,6 @@ export default function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  // ── navigation state ──────────────────────────────────────────────────────
   const [allCourses, setAllCourses] = useState<NavItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([
@@ -147,11 +141,10 @@ export default function HomePage() {
   const currentItems = breadcrumbs[breadcrumbs.length - 1].items.length
     ? breadcrumbs[breadcrumbs.length - 1].items
     : allCourses;
-
   const currentLevel = breadcrumbs[breadcrumbs.length - 1].kind;
   const isRoot = breadcrumbs.length === 1;
 
-  // ── load courses ──────────────────────────────────────────────────────────
+  // ── load courses ─────────────────────────────────────────────────────────
   const loadCourses = useCallback(async () => {
     setLoading(true);
     try {
@@ -166,7 +159,7 @@ export default function HomePage() {
 
   useEffect(() => { loadCourses(); }, [loadCourses]);
 
-  // ── navigation ────────────────────────────────────────────────────────────
+  // ── navigation ───────────────────────────────────────────────────────────
   const navigateTo = (item: NavItem) => {
     if (item.kind === "step") {
       const state: StepEditorState = {
@@ -179,17 +172,11 @@ export default function HomePage() {
       navigate("/step-editor", { state });
       return;
     }
-
     const children = getChildItems(item);
     const childKind = getChildKind(item);
     setBreadcrumbs((prev) => [
       ...prev,
-      {
-        label: item.name,
-        items: children,
-        kind: childKind,
-        path: String(item.id),
-      },
+      { label: item.name, items: children, kind: childKind, path: String(item.id) },
     ]);
   };
 
@@ -197,19 +184,36 @@ export default function HomePage() {
     setBreadcrumbs((prev) => prev.slice(0, index + 1));
   };
 
-  // ── delete step ───────────────────────────────────────────────────────────
+  // ── delete ───────────────────────────────────────────────────────────────
   const [confirmItem, setConfirmItem] = useState<NavItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  /** Формирует человекочитаемое предупреждение для диалога удаления */
+  const deleteMessage = (() => {
+    if (!confirmItem) return "";
+    const steps = countSteps(confirmItem);
+    const kindRu =
+      confirmItem.kind === "course" ? "курс" :
+      confirmItem.kind === "module" ? "модуль" : "подмодуль";
+    const label =
+      confirmItem.kind === "step"
+        ? `Шаг ${confirmItem.number ?? confirmItem.id}`
+        : confirmItem.name;
+    const extra =
+      steps > 0
+        ? ` Будет удалено ${steps} шаг(ов) вместе со всем содержимым.`
+        : "";
+    return `Удалить «${label}»?${extra} Это действие необратимо.`;
+  })();
 
   const handleDeleteConfirm = async () => {
     if (!confirmItem) return;
     setDeleteLoading(true);
     try {
       if (confirmItem.kind === "step") {
+        // ── удаление шага ──────────────────────────────────────────────────
         const submodulePath = buildPath(breadcrumbs);
-        // fileContentPath — с .txt, для fetchFileContent (бэкенд отдаёт SHA по полному пути)
         const fileContentPath = `${submodulePath}/${confirmItem.id}.txt`;
-        // deletePath — без .txt, бэкенд сам дописывает .txt в gitUrl
         const deletePath = `${submodulePath}/${confirmItem.id}`;
         const contentUrl = confirmItem.contentUrl ?? "";
 
@@ -217,9 +221,7 @@ export default function HomePage() {
         try {
           const res = await fetchFileContent(contentUrl, fileContentPath, confirmItem.isTest ?? false);
           sha = res.sha ?? "";
-        } catch {
-          // файл может не существовать на GitHub — удаляем только из БД
-        }
+        } catch { /* файла нет на GitHub — ок */ }
 
         await deleteFile({
           stepId: confirmItem.id as number,
@@ -228,19 +230,54 @@ export default function HomePage() {
           sha,
         });
         toast.success("Шаг удалён");
-        loadCourses();
+
+        // убираем из текущего уровня без перезагрузки
         setBreadcrumbs((prev) => {
           const last = prev[prev.length - 1];
           return [
             ...prev.slice(0, -1),
-            {
-              ...last,
-              items: last.items.filter((i) => i.id !== confirmItem.id),
-            },
+            { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
           ];
         });
+        loadCourses();
+
       } else {
-        toast.info("Удаление курсов/модулей/подмодулей пока не поддерживается");
+        // ── удаление курса / модуля / подмодуля ────────────────────────────
+        const currentPath = buildPath(breadcrumbs);
+        const itemPath = currentPath ? `${currentPath}/${confirmItem.id}` : String(confirmItem.id);
+        const typeMap = {
+          course: "course",
+          module: "module",
+          submodule: "submodule",
+        } as const;
+
+        await deleteDirectory({
+          id: confirmItem.id as number,
+          type: typeMap[confirmItem.kind as "course" | "module" | "submodule"],
+          path: itemPath,
+          message: `Delete ${confirmItem.kind} ${confirmItem.id} via admin panel`,
+        });
+
+        const kindRu =
+          confirmItem.kind === "course" ? "Курс" :
+          confirmItem.kind === "module" ? "Модуль" : "Подмодуль";
+        toast.success(`${kindRu} удалён`);
+
+        // если удаляем текущий уровень — поднимаемся на уровень выше
+        const itemIsCurrentLevel = breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
+        if (itemIsCurrentLevel) {
+          setBreadcrumbs((prev) => prev.slice(0, -1));
+        } else {
+          // убираем из списка текущего уровня
+          setBreadcrumbs((prev) => {
+            const last = prev[prev.length - 1];
+            return [
+              ...prev.slice(0, -1),
+              { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
+            ];
+          });
+        }
+        loadCourses();
       }
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка удаления");
@@ -261,27 +298,18 @@ export default function HomePage() {
 
   const handleCreateCourse = async () => {
     if (!ccName.trim() || !ccAuthor.trim() || !ccDesc.trim()) {
-      toast.error("Заполните обязательные поля");
-      return;
+      toast.error("Заполните обязательные поля"); return;
     }
     setCcLoading(true);
     try {
-      await createCourse({
-        name: ccName,
-        author: ccAuthor,
-        description: ccDesc,
-        icon: ccIcon,
-        message: "Create course via admin panel",
-      });
+      await createCourse({ name: ccName, author: ccAuthor, description: ccDesc, icon: ccIcon, message: "Create course via admin panel" });
       toast.success("Курс успешно создан");
       setShowCreateCourse(false);
       setCcName(""); setCcAuthor(""); setCcDesc(""); setCcIcon(""); setCcRating("5");
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось создать курс");
-    } finally {
-      setCcLoading(false);
-    }
+    } finally { setCcLoading(false); }
   };
 
   // ── edit course modal ─────────────────────────────────────────────────────
@@ -294,66 +322,44 @@ export default function HomePage() {
   const [ecLoading, setEcLoading] = useState(false);
 
   const openEditCourse = (item: NavItem) => {
-    setEditTarget(item);
-    setEcName(item.name);
-    setEcAuthor(item.author ?? "");
-    setEcDesc(item.description ?? "");
-    setEcIcon(item.icon ?? "");
-    setEcRating(String(item.rating ?? 5));
+    setEditTarget(item); setEcName(item.name); setEcAuthor(item.author ?? "");
+    setEcDesc(item.description ?? ""); setEcIcon(item.icon ?? ""); setEcRating(String(item.rating ?? 5));
   };
 
   const handleEditCourse = async () => {
     if (!editTarget) return;
     if (!ecName.trim() || !ecAuthor.trim() || !ecDesc.trim()) {
-      toast.error("Заполните обязательные поля");
-      return;
+      toast.error("Заполните обязательные поля"); return;
     }
     setEcLoading(true);
     try {
-      await editCourse({
-        id: editTarget.id as number,
-        name: ecName,
-        author: ecAuthor,
-        description: ecDesc,
-        icon: ecIcon,
-      });
+      await editCourse({ id: editTarget.id as number, name: ecName, author: ecAuthor, description: ecDesc, icon: ecIcon });
       toast.success("Курс успешно отредактирован");
       setEditTarget(null);
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось отредактировать курс");
-    } finally {
-      setEcLoading(false);
-    }
+    } finally { setEcLoading(false); }
   };
 
   // ── create directory modal ────────────────────────────────────────────────
   const [showCreateDir, setShowCreateDir] = useState(false);
   const [cdName, setCdName] = useState("");
   const [cdLoading, setCdLoading] = useState(false);
-
-  const dirKind: "module" | "submodule" =
-    currentLevel === "module" ? "module" : "submodule";
+  const dirKind: "module" | "submodule" = currentLevel === "module" ? "module" : "submodule";
 
   const handleCreateDir = async () => {
     if (!cdName.trim()) { toast.error("Введите имя"); return; }
     setCdLoading(true);
     const path = buildPath(breadcrumbs);
     try {
-      await createDirectory({
-        path: `${path}/${cdName}`,
-        type: dirKind,
-        message: `Create ${dirKind} via admin panel`,
-      });
+      await createDirectory({ path: `${path}/${cdName}`, type: dirKind, message: `Create ${dirKind} via admin panel` });
       toast.success(`${dirKind === "module" ? "Модуль" : "Подмодуль"} создан`);
-      setShowCreateDir(false);
-      setCdName("");
+      setShowCreateDir(false); setCdName("");
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания");
-    } finally {
-      setCdLoading(false);
-    }
+    } finally { setCdLoading(false); }
   };
 
   // ── create step modal ─────────────────────────────────────────────────────
@@ -364,27 +370,16 @@ export default function HomePage() {
   const handleCreateStep = async () => {
     setCsLoading(true);
     const submodulePath = buildPath(breadcrumbs);
-    const defaultContent = csIsTest
-      ? JSON.stringify({ questions: [] }, null, 2)
-      : "<p></p>";
+    const defaultContent = csIsTest ? JSON.stringify({ questions: [] }, null, 2) : "<p></p>";
     const encodedContent = btoa(unescape(encodeURIComponent(defaultContent)));
     try {
-      await createFile({
-        path: submodulePath,
-        content: encodedContent,
-        message: "Create step via admin panel",
-        image: false,
-        is_test: csIsTest,
-      });
+      await createFile({ path: submodulePath, content: encodedContent, message: "Create step via admin panel", image: false, is_test: csIsTest });
       toast.success(`Шаг создан (${csIsTest ? "Тест" : "Теория"})`);
-      setShowCreateStep(false);
-      setCsIsTest(false);
+      setShowCreateStep(false); setCsIsTest(false);
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания шага");
-    } finally {
-      setCsLoading(false);
-    }
+    } finally { setCsLoading(false); }
   };
 
   // ── rename modal ──────────────────────────────────────────────────────────
@@ -392,21 +387,15 @@ export default function HomePage() {
   const [rnName, setRnName] = useState("");
   const [rnLoading, setRnLoading] = useState(false);
 
-  const openRename = (item: NavItem) => {
-    setRenameTarget(item);
-    setRnName(item.name);
-  };
+  const openRename = (item: NavItem) => { setRenameTarget(item); setRnName(item.name); };
 
   const handleRename = async () => {
     if (!renameTarget || !rnName.trim() || rnName === renameTarget.name) {
-      toast.info("Нет изменений");
-      return;
+      toast.info("Нет изменений"); return;
     }
     setRnLoading(true);
     const path = `${buildPath(breadcrumbs)}/${renameTarget.id}`;
-    const fileTypeName =
-      renameTarget.kind === "course" ? "course" :
-      renameTarget.kind === "module" ? "module" : "submodule";
+    const fileTypeName = renameTarget.kind === "course" ? "course" : renameTarget.kind === "module" ? "module" : "submodule";
     try {
       await renameItem({ path, fileTypeName, newName: rnName });
       toast.success("Переименовано");
@@ -414,9 +403,7 @@ export default function HomePage() {
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка переименования");
-    } finally {
-      setRnLoading(false);
-    }
+    } finally { setRnLoading(false); }
   };
 
   // ── image upload ──────────────────────────────────────────────────────────
@@ -425,10 +412,7 @@ export default function HomePage() {
   const [uploadLoading, setUploadLoading] = useState(false);
 
   const handleImageFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Только изображения");
-      return;
-    }
+    if (!file.type.startsWith("image/")) { toast.error("Только изображения"); return; }
     setUploadLoading(true);
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -439,20 +423,16 @@ export default function HomePage() {
         toast.success("Изображение загружено");
       } catch (err: unknown) {
         toast.error((err as Error).message ?? "Ошибка загрузки");
-      } finally {
-        setUploadLoading(false);
-      }
+      } finally { setUploadLoading(false); }
     };
     reader.readAsDataURL(file);
   }, [breadcrumbs]); // eslint-disable-line
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
+    e.preventDefault(); setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) handleImageFile(file);
   };
-
   const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleImageFile(file);
@@ -468,19 +448,14 @@ export default function HomePage() {
       const blob = new Blob([sql], { type: "application/sql" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "migration.sql";
-      a.click();
+      a.href = url; a.download = "migration.sql"; a.click();
       URL.revokeObjectURL(url);
       toast.success("Миграция сгенерирована");
     } catch {
       toast.error("Не удалось сгенерировать миграцию");
-    } finally {
-      setMigLoading(false);
-    }
+    } finally { setMigLoading(false); }
   };
 
-  // ── what buttons to show ──────────────────────────────────────────────────
   const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
   const isAtSubmodule = currentLevel === "step";
 
@@ -499,10 +474,8 @@ export default function HomePage() {
             </p>
           </div>
           {isRoot && (
-            <button
-              onClick={() => setShowCreateCourse(true)}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-            >
+            <button onClick={() => setShowCreateCourse(true)}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
@@ -559,10 +532,8 @@ export default function HomePage() {
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-5">
           {canCreateDir && (
-            <button
-              onClick={() => setShowCreateDir(true)}
-              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition"
-            >
+            <button onClick={() => setShowCreateDir(true)}
+              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                   d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
@@ -571,10 +542,8 @@ export default function HomePage() {
             </button>
           )}
           {isAtSubmodule && (
-            <button
-              onClick={() => setShowCreateStep(true)}
-              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition"
-            >
+            <button onClick={() => setShowCreateStep(true)}
+              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
               </svg>
@@ -588,14 +557,12 @@ export default function HomePage() {
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1">
               {i > 0 && <span className="text-gray-300">/</span>}
-              <button
-                onClick={() => navigateToCrumb(i)}
+              <button onClick={() => navigateToCrumb(i)}
                 className={`px-1.5 py-0.5 rounded transition ${
                   i === breadcrumbs.length - 1
                     ? "font-semibold text-text-heading cursor-default"
                     : "text-text-muted hover:text-primary hover:bg-blue-50"
-                }`}
-              >
+                }`}>
                 {crumb.label}
               </button>
             </span>
@@ -616,9 +583,7 @@ export default function HomePage() {
             Загрузка курсов...
           </div>
         ) : currentItems.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 border border-dashed rounded-lg text-sm">
-            Пусто
-          </div>
+          <div className="text-center py-10 text-gray-400 border border-dashed rounded-lg text-sm">Пусто</div>
         ) : (
           <ul className="space-y-1.5">
             {currentItems.map((item) => (
@@ -637,11 +602,8 @@ export default function HomePage() {
       </section>
 
       {/* Floating migration button */}
-      <button
-        onClick={handleGenerateMigration}
-        disabled={migLoading}
-        className="fixed bottom-6 right-6 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 z-40"
-      >
+      <button onClick={handleGenerateMigration} disabled={migLoading}
+        className="fixed bottom-6 right-6 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 z-40">
         {migLoading ? (
           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -656,11 +618,10 @@ export default function HomePage() {
         {migLoading ? "Генерация..." : "Сгенерировать миграцию"}
       </button>
 
-      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      {/* ── Modals ───────────────────────────────────────────────────────── */}
 
       {/* Create course */}
-      <Modal open={showCreateCourse} title="Создать курс"
-        onClose={() => setShowCreateCourse(false)}
+      <Modal open={showCreateCourse} title="Создать курс" onClose={() => setShowCreateCourse(false)}
         footer={
           <>
             <button onClick={() => setShowCreateCourse(false)} disabled={ccLoading}
@@ -670,8 +631,7 @@ export default function HomePage() {
               {ccLoading ? "Создание..." : "Создать"}
             </button>
           </>
-        }
-      >
+        }>
         <div className="space-y-4">
           <Field label="Название" id="cc-name" value={ccName} onChange={setCcName} required placeholder="Технический анализ" />
           <Field label="Автор" id="cc-author" value={ccAuthor} onChange={setCcAuthor} required placeholder="Иван Иванов" />
@@ -682,8 +642,7 @@ export default function HomePage() {
       </Modal>
 
       {/* Edit course */}
-      <Modal open={!!editTarget} title="Редактировать курс"
-        onClose={() => setEditTarget(null)}
+      <Modal open={!!editTarget} title="Редактировать курс" onClose={() => setEditTarget(null)}
         footer={
           <>
             <button onClick={() => setEditTarget(null)} disabled={ecLoading}
@@ -693,8 +652,7 @@ export default function HomePage() {
               {ecLoading ? "Сохранение..." : "Сохранить"}
             </button>
           </>
-        }
-      >
+        }>
         <div className="space-y-4">
           <Field label="Название" id="ec-name" value={ecName} onChange={setEcName} required />
           <Field label="Автор" id="ec-author" value={ecAuthor} onChange={setEcAuthor} required />
@@ -716,8 +674,7 @@ export default function HomePage() {
               {cdLoading ? "Создание..." : "Создать"}
             </button>
           </>
-        }
-      >
+        }>
         <Field label="Название" id="cd-name" value={cdName} onChange={setCdName} required
           placeholder={dirKind === "module" ? "Введение" : "Урок 1"} />
       </Modal>
@@ -734,33 +691,24 @@ export default function HomePage() {
               {csLoading ? "Создание..." : "Создать шаг"}
             </button>
           </>
-        }
-      >
+        }>
         <div className="space-y-4">
           <p className="text-sm text-text-muted">Выберите тип нового шага:</p>
           <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setCsIsTest(false)}
+            <button onClick={() => setCsIsTest(false)}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
-                !csIsTest
-                  ? "border-primary bg-blue-50 text-primary"
-                  : "border-gray-200 text-text-muted hover:border-gray-300"
-              }`}
-            >
+                !csIsTest ? "border-primary bg-blue-50 text-primary" : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                   d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               <span className="text-sm font-medium">Теория</span>
             </button>
-            <button
-              onClick={() => setCsIsTest(true)}
+            <button onClick={() => setCsIsTest(true)}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
-                csIsTest
-                  ? "border-purple-500 bg-purple-50 text-purple-700"
-                  : "border-gray-200 text-text-muted hover:border-gray-300"
-              }`}
-            >
+                csIsTest ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                   d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -772,8 +720,7 @@ export default function HomePage() {
       </Modal>
 
       {/* Rename */}
-      <Modal open={!!renameTarget} title="Переименовать"
-        onClose={() => setRenameTarget(null)}
+      <Modal open={!!renameTarget} title="Переименовать" onClose={() => setRenameTarget(null)}
         footer={
           <>
             <button onClick={() => setRenameTarget(null)} disabled={rnLoading}
@@ -783,15 +730,14 @@ export default function HomePage() {
               {rnLoading ? "Сохранение..." : "Переименовать"}
             </button>
           </>
-        }
-      >
+        }>
         <Field label="Новое имя" id="rn-name" value={rnName} onChange={setRnName} required />
       </Modal>
 
       {/* Delete confirm */}
       <ConfirmDialog
         open={!!confirmItem}
-        message={`Удалить «${confirmItem?.kind === "step" ? `Шаг ${confirmItem?.number ?? confirmItem?.id}` : confirmItem?.name ?? ""}»? Это действие необратимо.`}
+        message={deleteMessage}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setConfirmItem(null)}
         loading={deleteLoading}

@@ -36,6 +36,16 @@ export interface DeleteImagePayload {
   sha: string;
 }
 
+export interface DeleteDirectoryPayload {
+  /** ID записи в БД (course.id / coursemodule.id / submodule.id) */
+  id: number;
+  /** Тип: 'course' | 'module' | 'submodule' */
+  type: "course" | "module" | "submodule";
+  /** Путь к папке без ведущего 'courses/' — напр. '1' или '1/2' или '1/2/3' */
+  path: string;
+  message: string;
+}
+
 export interface CreateDirectoryPayload {
   path: string;
   type: "module" | "submodule";
@@ -96,6 +106,13 @@ export async function deleteFile(payload: DeleteFilePayload) {
 
 export async function deleteImage(payload: DeleteImagePayload) {
   return apiFetch<{ success: boolean; data: unknown }>("/api/delete-image", {
+    method: "DELETE",
+    body: payload,
+  });
+}
+
+export async function deleteDirectory(payload: DeleteDirectoryPayload) {
+  return apiFetch<{ success: boolean }>("/api/delete-directory", {
     method: "DELETE",
     body: payload,
   });
