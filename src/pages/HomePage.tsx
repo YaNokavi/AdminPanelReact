@@ -12,7 +12,7 @@ import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ToastContainer from "../components/ToastContainer";
 import { useToast } from "../hooks/useToast";
-import { fetchCourses } from "../api/courses";
+import { fetchCourses, fetchFileContent } from "../api/courses";
 import type { Course } from "../api/courses";
 import {
   createCourse,
@@ -21,6 +21,8 @@ import {
   renameItem,
   createImage,
   generateMigration,
+  createFile,
+  deleteFile,
 } from "../api/mutations";
 import type { StepEditorState } from "./StepEditorPage";
 
@@ -166,7 +168,6 @@ export default function HomePage() {
 
   // ── navigation ────────────────────────────────────────────────────────────
   const navigateTo = (item: NavItem) => {
-    // Клик на шаг → открываем редактор
     if (item.kind === "step") {
       const state: StepEditorState = {
         stepId: item.id as number,
@@ -196,7 +197,7 @@ export default function HomePage() {
     setBreadcrumbs((prev) => prev.slice(0, index + 1));
   };
 
-  // ── delete confirm ────────────────────────────────────────────────────────
+  // ── delete step ───────────────────────────────────────────────────────────
   const [confirmItem, setConfirmItem] = useState<NavItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -204,7 +205,44 @@ export default function HomePage() {
     if (!confirmItem) return;
     setDeleteLoading(true);
     try {
-      toast.info("Удаление пока доступно только из редактора шагов");
+      if (confirmItem.kind === "step") {
+        const submodulePath = buildPath(breadcrumbs);
+        const filePath = `${submodulePath}/${confirmItem.id}.txt`;
+        const contentUrl = confirmItem.contentUrl ?? "";
+
+        // нужен SHA файла перед удалением
+        let sha = "";
+        try {
+          const res = await fetchFileContent(contentUrl, filePath, confirmItem.isTest ?? false);
+          sha = res.sha ?? "";
+        } catch {
+          // файл может не существовать на GitHub — удаляем только из БД
+        }
+
+        await deleteFile({
+          stepId: confirmItem.id as number,
+          path: filePath,
+          message: `Delete step ${confirmItem.id} via admin panel`,
+          sha,
+        });
+        toast.success("Шаг удалён");
+        loadCourses();
+        // обновляем текущий уровень breadcrumbs
+        setBreadcrumbs((prev) => {
+          const last = prev[prev.length - 1];
+          return [
+            ...prev.slice(0, -1),
+            {
+              ...last,
+              items: last.items.filter((i) => i.id !== confirmItem.id),
+            },
+          ];
+        });
+      } else {
+        toast.info("Удаление курсов/модулей/подмодулей пока не поддерживается");
+      }
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка удаления");
     } finally {
       setDeleteLoading(false);
       setConfirmItem(null);
@@ -317,6 +355,39 @@ export default function HomePage() {
     }
   };
 
+  // ── create step modal ─────────────────────────────────────────────────────
+  const [showCreateStep, setShowCreateStep] = useState(false);
+  const [csIsTest, setCsIsTest] = useState(false);
+  const [csLoading, setCsLoading] = useState(false);
+
+  const handleCreateStep = async () => {
+    setCsLoading(true);
+    const submodulePath = buildPath(breadcrumbs);
+    // контент по умолчанию
+    const defaultContent = csIsTest
+      ? JSON.stringify({ questions: [] }, null, 2)
+      : "<p></p>";
+    const encodedContent = btoa(unescape(encodeURIComponent(defaultContent)));
+    // path будет определён бэкендом (он сам создаёт stepId), передаём путь подмодуля
+    try {
+      await createFile({
+        path: submodulePath,
+        content: encodedContent,
+        message: "Create step via admin panel",
+        image: false,
+        is_test: csIsTest,
+      });
+      toast.success(`Шаг создан (${csIsTest ? "Тест" : "Теория"})`);
+      setShowCreateStep(false);
+      setCsIsTest(false);
+      loadCourses();
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка создания шага");
+    } finally {
+      setCsLoading(false);
+    }
+  };
+
   // ── rename modal ──────────────────────────────────────────────────────────
   const [renameTarget, setRenameTarget] = useState<NavItem | null>(null);
   const [rnName, setRnName] = useState("");
@@ -412,7 +483,7 @@ export default function HomePage() {
 
   // ── what buttons to show ──────────────────────────────────────────────────
   const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
-  const isAtStep = currentLevel === "step";
+  const isAtSubmodule = currentLevel === "step"; // мы внутри подмодуля, показываем шаги
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -500,10 +571,16 @@ export default function HomePage() {
               Создать {dirKind === "module" ? "модуль" : "подмодуль"}
             </button>
           )}
-          {isAtStep && (
-            <span className="text-xs text-text-muted self-center">
-              Нажмите на шаг, чтобы открыть редактор
-            </span>
+          {isAtSubmodule && (
+            <button
+              onClick={() => setShowCreateStep(true)}
+              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              Добавить шаг
+            </button>
           )}
         </div>
 
@@ -646,6 +723,55 @@ export default function HomePage() {
           placeholder={dirKind === "module" ? "Введение" : "Урок 1"} />
       </Modal>
 
+      {/* Create step */}
+      <Modal open={showCreateStep} title="Добавить шаг"
+        onClose={() => { setShowCreateStep(false); setCsIsTest(false); }}
+        footer={
+          <>
+            <button onClick={() => { setShowCreateStep(false); setCsIsTest(false); }} disabled={csLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
+            <button onClick={handleCreateStep} disabled={csLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-700 text-white transition disabled:opacity-50">
+              {csLoading ? "Создание..." : "Создать шаг"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-muted">Выберите тип нового шага:</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setCsIsTest(false)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
+                !csIsTest
+                  ? "border-primary bg-blue-50 text-primary"
+                  : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span className="text-sm font-medium">Теория</span>
+            </button>
+            <button
+              onClick={() => setCsIsTest(true)}
+              className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
+                csIsTest
+                  ? "border-purple-500 bg-purple-50 text-purple-700"
+                  : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <span className="text-sm font-medium">Тест</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Rename */}
       <Modal open={!!renameTarget} title="Переименовать"
         onClose={() => setRenameTarget(null)}
@@ -666,7 +792,7 @@ export default function HomePage() {
       {/* Delete confirm */}
       <ConfirmDialog
         open={!!confirmItem}
-        message={`Удалить «${confirmItem?.name ?? ""}»? Это действие необратимо.`}
+        message={`Удалить «${confirmItem?.kind === "step" ? `Шаг ${confirmItem?.number ?? confirmItem?.id}` : confirmItem?.name ?? ""}»? Это действие необратимо.`}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setConfirmItem(null)}
         loading={deleteLoading}
