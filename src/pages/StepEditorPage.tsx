@@ -23,7 +23,6 @@ export default function StepEditorPage() {
 
   const state = location.state as StepEditorState | null;
 
-  // ── Guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!state) navigate("/", { replace: true });
   }, []); // eslint-disable-line
@@ -36,7 +35,6 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // ── Delete state ──────────────────────────────────────────────────────
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -45,8 +43,9 @@ export default function StepEditorPage() {
     if (!state) return;
     setLoading(true);
     try {
-      const filePath = `${state.submodulePath}/${state.stepId}.txt`;
-      const res = await fetchFileContent(state.contentUrl, filePath, state.isTest);
+      // fetchFileContent ожидает полный путь с .txt
+      const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
+      const res = await fetchFileContent(state.contentUrl, fileContentPath, state.isTest);
       setFileSha(res.sha ?? "");
       if (state.isTest) {
         const raw = res.content.data;
@@ -67,10 +66,11 @@ export default function StepEditorPage() {
 
   useEffect(() => { loadContent(); }, [loadContent]);
 
-  // ── Save ──────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
+    // update-file и create-file ожидают полный путь с .txt
     const filePath = `${state.submodulePath}/${state.stepId}.txt`;
     const contentToSave = isTest
       ? JSON.stringify(testData, null, 2)
@@ -102,7 +102,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ──────────────────────────────────────────────────
+  // ── Toggle test/theory ───────────────────────────────────────────────────
   const handleToggleType = async () => {
     if (!state) return;
     const newIsTest = !isTest;
@@ -116,15 +116,16 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ─────────────────────────────────────────────────────────
+  // ── Delete step ───────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
-    const filePath = `${state.submodulePath}/${state.stepId}.txt`;
+    // delete-file на бэкенде сам дописывает .txt — передаём путь без расширения
+    const deletePath = `${state.submodulePath}/${state.stepId}`;
     try {
       await deleteFile({
         stepId: state.stepId,
-        path: filePath,
+        path: deletePath,
         message: `Delete step ${state.stepId} via admin panel`,
         sha: fileSha,
       });

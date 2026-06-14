@@ -207,13 +207,15 @@ export default function HomePage() {
     try {
       if (confirmItem.kind === "step") {
         const submodulePath = buildPath(breadcrumbs);
-        const filePath = `${submodulePath}/${confirmItem.id}.txt`;
+        // fileContentPath — с .txt, для fetchFileContent (бэкенд отдаёт SHA по полному пути)
+        const fileContentPath = `${submodulePath}/${confirmItem.id}.txt`;
+        // deletePath — без .txt, бэкенд сам дописывает .txt в gitUrl
+        const deletePath = `${submodulePath}/${confirmItem.id}`;
         const contentUrl = confirmItem.contentUrl ?? "";
 
-        // нужен SHA файла перед удалением
         let sha = "";
         try {
-          const res = await fetchFileContent(contentUrl, filePath, confirmItem.isTest ?? false);
+          const res = await fetchFileContent(contentUrl, fileContentPath, confirmItem.isTest ?? false);
           sha = res.sha ?? "";
         } catch {
           // файл может не существовать на GitHub — удаляем только из БД
@@ -221,13 +223,12 @@ export default function HomePage() {
 
         await deleteFile({
           stepId: confirmItem.id as number,
-          path: filePath,
+          path: deletePath,
           message: `Delete step ${confirmItem.id} via admin panel`,
           sha,
         });
         toast.success("Шаг удалён");
         loadCourses();
-        // обновляем текущий уровень breadcrumbs
         setBreadcrumbs((prev) => {
           const last = prev[prev.length - 1];
           return [
@@ -363,12 +364,10 @@ export default function HomePage() {
   const handleCreateStep = async () => {
     setCsLoading(true);
     const submodulePath = buildPath(breadcrumbs);
-    // контент по умолчанию
     const defaultContent = csIsTest
       ? JSON.stringify({ questions: [] }, null, 2)
       : "<p></p>";
     const encodedContent = btoa(unescape(encodeURIComponent(defaultContent)));
-    // path будет определён бэкендом (он сам создаёт stepId), передаём путь подмодуля
     try {
       await createFile({
         path: submodulePath,
@@ -483,7 +482,7 @@ export default function HomePage() {
 
   // ── what buttons to show ──────────────────────────────────────────────────
   const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
-  const isAtSubmodule = currentLevel === "step"; // мы внутри подмодуля, показываем шаги
+  const isAtSubmodule = currentLevel === "step";
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
