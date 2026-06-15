@@ -159,7 +159,9 @@ export default function HomePage() {
     setImagesLoading(true);
     try {
       const folders = await fetchFolderImages(path);
-      const images = folders.flatMap((f) => f.images ?? []);
+      const images = folders
+        .flatMap((f) => f.images ?? [])
+        .filter((img) => img.name !== ".gitkeep");
       setSubmoduleImages(images);
     } catch {
       setSubmoduleImages([]);
