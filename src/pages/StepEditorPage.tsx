@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import TiptapEditor from "../components/TiptapEditor";
+import TiptapEditor, { type TiptapEditorRef } from "../components/TiptapEditor";
 import TestEditor, { type TestData } from "../components/TestEditor";
 import ToastContainer from "../components/ToastContainer";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { fetchFileContent } from "../api/courses";
-import { updateFile, editStep, createFile, deleteFile } from "../api/mutations";
+import { updateFile, editStep, createFile, deleteFile, createImage } from "../api/mutations";
 
 export interface StepEditorState {
   stepId: number;
@@ -38,12 +38,53 @@ export default function StepEditorPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // ── Load content ─────────────────────────────────────────────────────────
+  // ── Image insert refs ────────────────────────────────────────────────────────
+  const editorRef = useRef<TiptapEditorRef>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+
+  const handleInsertImageRequest = () => {
+    imageInputRef.current?.click();
+  };
+
+  const handleImageFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !state) return;
+    if (!file.type.startsWith("image/")) { toast.error("Только изображения"); return; }
+
+    setImageUploading(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = (ev.target?.result as string).split(",")[1];
+      // Кладём в images/ папку подмодуля
+      const imagePath = `${state.submodulePath}/images/${file.name}`;
+      const rawUrl = `https://raw.githubusercontent.com/YaNokavi/CunaEduFile/refs/heads/main/courses/${imagePath}`;
+      try {
+        await createImage({
+          path: imagePath,
+          content: base64,
+          message: `Upload image ${file.name} via admin panel`,
+        });
+        // Вставляем в редактор через ref
+        editorRef.current?.insertImage(rawUrl);
+        setDirty(true);
+        toast.success("Изображение вставлено");
+      } catch (err: unknown) {
+        toast.error((err as Error).message ?? "Ошибка загрузки изображения");
+      } finally {
+        setImageUploading(false);
+        // Сбрасываем input чтобы можно загрузить то же фото ещё раз
+        if (imageInputRef.current) imageInputRef.current.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
+  }, [state]); // eslint-disable-line
+
+  // ── Load content ───────────────────────────────────────────────────────────────
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
     try {
-      // fetchFileContent ожидает полный путь с .txt
       const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
       const res = await fetchFileContent(state.contentUrl, fileContentPath, state.isTest);
       setFileSha(res.sha ?? "");
@@ -66,15 +107,12 @@ export default function StepEditorPage() {
 
   useEffect(() => { loadContent(); }, [loadContent]);
 
-  // ── Save ──────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
-    // update-file и create-file ожидают полный путь с .txt
     const filePath = `${state.submodulePath}/${state.stepId}.txt`;
-    const contentToSave = isTest
-      ? JSON.stringify(testData, null, 2)
-      : htmlContent;
+    const contentToSave = isTest ? JSON.stringify(testData, null, 2) : htmlContent;
     try {
       if (fileSha) {
         await updateFile({
@@ -116,11 +154,10 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ───────────────────────────────────────────────────────────
+  // ── Delete step ─────────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
-    // delete-file на бэкенде сам дописывает .txt — передаём путь без расширения
     const deletePath = `${state.submodulePath}/${state.stepId}`;
     try {
       await deleteFile({
@@ -143,6 +180,15 @@ export default function StepEditorPage() {
   return (
     <div className="flex flex-col h-full">
       <ToastContainer toasts={toast.toasts} />
+
+      {/* Скрытый input для загрузки изображений */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
 
       {/* Top bar */}
       <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
@@ -196,6 +242,16 @@ export default function StepEditorPage() {
           <span className="text-xs text-orange-500 font-medium">Несохранённые изменения</span>
         )}
 
+        {imageUploading && (
+          <span className="text-xs text-blue-500 font-medium flex items-center gap-1">
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Загрузка...
+          </span>
+        )}
+
         {/* Delete button */}
         <button
           onClick={() => setShowDeleteConfirm(true)}
@@ -245,8 +301,10 @@ export default function StepEditorPage() {
           />
         ) : (
           <TiptapEditor
+            ref={editorRef}
             content={htmlContent}
             onChange={(html) => { setHtmlContent(html); setDirty(true); }}
+            onInsertImageRequest={handleInsertImageRequest}
           />
         )}
       </div>

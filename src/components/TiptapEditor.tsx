@@ -4,12 +4,15 @@ import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+
+export interface TiptapEditorRef {
+  insertImage: (url: string) => void;
+}
 
 interface Props {
   content: string;
   onChange: (html: string) => void;
-  onInsertImageRequest?: () => void;
 }
 
 const btnCls = (active: boolean) =>
@@ -19,7 +22,10 @@ const btnCls = (active: boolean) =>
       : "bg-gray-100 hover:bg-gray-200 text-text-heading"
   }`;
 
-export default function TiptapEditor({ content, onChange, onInsertImageRequest }: Props) {
+const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
+  { content, onChange },
+  ref
+) {
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -34,7 +40,14 @@ export default function TiptapEditor({ content, onChange, onInsertImageRequest }
     },
   });
 
-  // Sync external content changes (e.g. on load)
+  // Пробрасываем insertImage наружу через ref
+  useImperativeHandle(ref, () => ({
+    insertImage(url: string) {
+      editor?.chain().focus().setImage({ src: url }).run();
+    },
+  }), [editor]);
+
+  // Sync external content changes
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content, false);
@@ -71,9 +84,6 @@ export default function TiptapEditor({ content, onChange, onInsertImageRequest }
         <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={btnCls(editor.isActive("codeBlock"))} title="Код">{"</>"}  </button>
         <div className="w-px bg-gray-300 mx-1" />
         <button type="button" onClick={setLink} className={btnCls(editor.isActive("link"))} title="Ссылка">🔗</button>
-        {onInsertImageRequest && (
-          <button type="button" onClick={onInsertImageRequest} className={btnCls(false)} title="Вставить изображение">🖼</button>
-        )}
         <div className="w-px bg-gray-300 mx-1" />
         <button type="button" onClick={() => editor.chain().focus().undo().run()} className={btnCls(false)} title="Отменить">↩</button>
         <button type="button" onClick={() => editor.chain().focus().redo().run()} className={btnCls(false)} title="Повторить">↪</button>
@@ -86,4 +96,6 @@ export default function TiptapEditor({ content, onChange, onInsertImageRequest }
       />
     </div>
   );
-}
+});
+
+export default TiptapEditor;
