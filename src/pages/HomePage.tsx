@@ -518,7 +518,7 @@ export default function HomePage() {
     } finally { setRnLoading(false); }
   };
 
-  // ── image upload ──────────────────────────────────────────────────────────
+  // ── image upload (only at submodule level) ───────────────────────────────
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
@@ -530,22 +530,19 @@ export default function HomePage() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = (e.target?.result as string).split(",")[1];
-        // Если находимся внутри сабмодуля — кладём в images/, иначе — рядом с текущим путём
         const submodulePath = buildPath(breadcrumbs);
-        const path = isAtSubmodule
-          ? `${submodulePath}/images/${file.name}`
-          : `${submodulePath}/${file.name}`;
+        const path = `${submodulePath}/images/${file.name}`;
         try {
           await createImage({ path, content: base64, message: "Upload image via admin panel" });
           toast.success("Изображение загружено");
-          if (isAtSubmodule) loadSubmoduleImages(submodulePath);
+          loadSubmoduleImages(submodulePath);
         } catch (err: unknown) {
           toast.error((err as Error).message ?? "Ошибка загрузки");
         } finally { setUploadLoading(false); }
       };
       reader.readAsDataURL(file);
     },
-    [breadcrumbs, isAtSubmodule], // eslint-disable-line
+    [breadcrumbs], // eslint-disable-line
   );
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -630,23 +627,26 @@ export default function HomePage() {
 
       {/* File section */}
       <section className="bg-white rounded-xl shadow-sm border border-border p-6 mb-24">
-        {/* Drop zone */}
-        <div
-          className={`border-2 border-dashed rounded-lg p-5 text-center text-text-muted text-sm cursor-pointer transition mb-5 ${
-            dragOver ? "border-primary bg-blue-50/40" : "border-gray-300 hover:border-primary hover:bg-blue-50/20"
-          } ${uploadLoading ? "opacity-50 pointer-events-none" : ""}`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <svg className="w-7 h-7 mx-auto mb-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {uploadLoading ? "Загрузка..." : isAtSubmodule ? "Перетащите изображение или нажмите — сохранится в images/" : "Перетащите изображение или нажмите для выбора"}
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
-        </div>
+
+        {/* Drop zone — только внутри сабмодуля */}
+        {isAtSubmodule && (
+          <div
+            className={`border-2 border-dashed rounded-lg p-5 text-center text-text-muted text-sm cursor-pointer transition mb-5 ${
+              dragOver ? "border-primary bg-blue-50/40" : "border-gray-300 hover:border-primary hover:bg-blue-50/20"
+            } ${uploadLoading ? "opacity-50 pointer-events-none" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <svg className="w-7 h-7 mx-auto mb-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {uploadLoading ? "Загрузка..." : "Перетащите изображение или нажмите — сохранится в images/"}
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-5">
@@ -719,7 +719,7 @@ export default function HomePage() {
           </ul>
         )}
 
-        {/* Images section — показывается только внутри сабмодуля */}
+        {/* Images section — только внутри сабмодуля */}
         {isAtSubmodule && (
           <div className="mt-6">
             <div className="flex items-center gap-2 mb-3">
