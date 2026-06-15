@@ -54,6 +54,9 @@ export default function StepEditorPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [showToggleConfirm, setShowToggleConfirm] = useState(false);
+  const [toggling, setToggling] = useState(false);
+
   // ── Image insert refs ─────────────────────────────────────────────────────────
   const editorRef = useRef<TiptapEditorRef>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -164,19 +167,23 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ──────────────────────────────────────────────────────
-  const handleToggleType = async () => {
+  // ── Toggle test/theory (with confirm) ───────────────────────────────────
+  const handleToggleConfirm = async () => {
     if (!state) return;
+    setToggling(true);
     const newIsTest = !isTest;
     try {
       await editStep(state.stepId, newIsTest);
       setIsTest(newIsTest);
       if (newIsTest) setTestData(emptyTest());
       else setHtmlContent("");
-      toast.success(`Тип изменён на «${newIsTest ? "Тест" : "Теория"}»`);
       setDirty(true);
+      toast.success(`Тип изменён на «${newIsTest ? "Тест" : "Теория"}»`);
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка смены типа");
+    } finally {
+      setToggling(false);
+      setShowToggleConfirm(false);
     }
   };
 
@@ -193,7 +200,6 @@ export default function StepEditorPage() {
         sha: fileSha,
       });
       toast.success("Шаг удалён");
-      // Возвращаемся в нужный сабмодуль, а не на главную
       const returnState: HomeReturnState = { returnPath: state.submodulePath };
       navigate("/", { replace: true, state: returnState });
     } catch (e: unknown) {
@@ -239,8 +245,9 @@ export default function StepEditorPage() {
 
         {/* Step type badge + toggle */}
         <button
-          onClick={handleToggleType}
-          className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition ${
+          onClick={() => setShowToggleConfirm(true)}
+          disabled={loading || toggling}
+          className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition disabled:opacity-50 ${
             isTest
               ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
               : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
@@ -336,6 +343,15 @@ export default function StepEditorPage() {
           />
         )}
       </div>
+
+      {/* Toggle type confirm dialog */}
+      <ConfirmDialog
+        open={showToggleConfirm}
+        message={`Сменить тип шага с «${isTest ? "Тест" : "Теория"}» на «${isTest ? "Теория" : "Тест"}»? Текущее содержимое будет очищено.`}
+        onConfirm={handleToggleConfirm}
+        onCancel={() => setShowToggleConfirm(false)}
+        loading={toggling}
+      />
 
       {/* Delete confirm dialog */}
       <ConfirmDialog
