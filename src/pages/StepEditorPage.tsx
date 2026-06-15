@@ -60,6 +60,7 @@ export default function StepEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [showHtml, setShowHtml] = useState(false);
 
   // Оригинальные значения — берутся из нормализованного HTML редактора (через onReady)
   const initialTestData = useRef<string>("");
@@ -120,6 +121,7 @@ export default function StepEditorPage() {
     if (!state) return;
     setLoading(true);
     setDirty(false);
+    setShowHtml(false);
     try {
       const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
       const res = await fetchFileContent(
@@ -362,6 +364,21 @@ export default function StepEditorPage() {
           )}
         </button>
 
+        {!isTest && (
+          <button
+            onClick={() => setShowHtml((v) => !v)}
+            disabled={loading}
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition disabled:opacity-50 ${
+              showHtml
+                ? "bg-gray-800 text-white border-gray-800"
+                : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
+            }`}
+            title="Просмотр HTML-кода"
+          >
+            &lt;/&gt;
+          </button>
+        )}
+
         {dirty && (
           <span className="text-xs text-orange-500 font-medium">
             Несохранённые изменения
@@ -485,6 +502,12 @@ export default function StepEditorPage() {
           </div>
         ) : isTest ? (
           <TestEditor data={testData} onChange={handleTestChange} />
+        ) : showHtml ? (
+          <div className="relative">
+            <pre className="bg-gray-900 text-green-400 text-xs font-mono p-4 rounded-lg overflow-x-auto whitespace-pre-wrap break-all min-h-[300px]">
+              {htmlContent}
+            </pre>
+          </div>
         ) : (
           <TiptapEditor
             ref={editorRef}
