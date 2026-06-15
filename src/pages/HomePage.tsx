@@ -168,7 +168,6 @@ export default function HomePage() {
     }
   }, []);
 
-  // Загружаем изображения каждый раз при переходе в сабмодуль
   useEffect(() => {
     if (isAtSubmodule) {
       loadSubmoduleImages(buildPath(breadcrumbs));
@@ -181,7 +180,6 @@ export default function HomePage() {
     if (!confirmImage) return;
     setDeletingImage(true);
     try {
-      // Получаем sha файла перед удалением
       const fileContent = await fetchFileContent(
         confirmImage.content_url,
         confirmImage.path,
@@ -215,7 +213,6 @@ export default function HomePage() {
     }
   }, []); // eslint-disable-line
 
-  // ── restore breadcrumbs from returnPath (after back from StepEditorPage) ───
   useEffect(() => {
     const returnState = location.state as HomeReturnState | null;
     const returnPath = returnState?.returnPath;
@@ -533,12 +530,15 @@ export default function HomePage() {
       const reader = new FileReader();
       reader.onload = async (e) => {
         const base64 = (e.target?.result as string).split(",")[1];
-        const path = `${buildPath(breadcrumbs)}/${file.name}`;
+        // Если находимся внутри сабмодуля — кладём в images/, иначе — рядом с текущим путём
+        const submodulePath = buildPath(breadcrumbs);
+        const path = isAtSubmodule
+          ? `${submodulePath}/images/${file.name}`
+          : `${submodulePath}/${file.name}`;
         try {
           await createImage({ path, content: base64, message: "Upload image via admin panel" });
           toast.success("Изображение загружено");
-          // Обновить список изображений если находимся внутри сабмодуля
-          if (isAtSubmodule) loadSubmoduleImages(buildPath(breadcrumbs));
+          if (isAtSubmodule) loadSubmoduleImages(submodulePath);
         } catch (err: unknown) {
           toast.error((err as Error).message ?? "Ошибка загрузки");
         } finally { setUploadLoading(false); }
@@ -644,7 +644,7 @@ export default function HomePage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
               d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          {uploadLoading ? "Загрузка..." : "Перетащите изображение или нажмите для выбора"}
+          {uploadLoading ? "Загрузка..." : isAtSubmodule ? "Перетащите изображение или нажмите — сохранится в images/" : "Перетащите изображение или нажмите для выбора"}
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
         </div>
 
@@ -688,7 +688,7 @@ export default function HomePage() {
           ))}
         </nav>
 
-        {/* Steps list */}
+        {/* Items list */}
         <div className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">
           {loading && isRoot ? "Загрузка..." : `Содержимое · ${currentItems.length} элем.`}
         </div>
