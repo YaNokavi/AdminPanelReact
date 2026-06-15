@@ -12,8 +12,8 @@ import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ToastContainer from "../components/ToastContainer";
 import { useToast } from "../hooks/useToast";
-import { fetchCourses, fetchFileContent, fetchSteps, fetchModules, fetchSubmodules } from "../api/courses";
-import type { Course } from "../api/courses";
+import { fetchCourses, fetchFileContent, fetchSteps, fetchModules, fetchSubmodules, fetchFolderImages } from "../api/courses";
+import type { Course, ImageFile } from "../api/courses";
 import {
   createCourse,
   editCourse,
@@ -24,6 +24,7 @@ import {
   createFile,
   deleteFile,
   deleteDirectory,
+  deleteImage,
 } from "../api/mutations";
 import type { StepEditorState, HomeReturnState } from "./StepEditorPage";
 
@@ -89,23 +90,14 @@ function buildPath(crumbs: BreadcrumbItem[]): string {
     .join("/");
 }
 
-/** Подсчёт шагов внутри элемента для предупреждения */
 function countSteps(item: NavItem): number {
   if (item.kind === "step") return 1;
   if (item.kind === "submodule") return (item.steps ?? []).length;
   if (item.kind === "module")
-    return (item.submodules ?? []).reduce(
-      (s, sm) => s + (sm.steps ?? []).length,
-      0,
-    );
+    return (item.submodules ?? []).reduce((s, sm) => s + (sm.steps ?? []).length, 0);
   if (item.kind === "course")
     return (item.modules ?? []).reduce(
-      (s, m) =>
-        s +
-        (m.submodules ?? []).reduce(
-          (ss, sm) => ss + (sm.steps ?? []).length,
-          0,
-        ),
+      (s, m) => s + (m.submodules ?? []).reduce((ss, sm) => ss + (sm.steps ?? []).length, 0),
       0,
     );
   return 0;
@@ -155,6 +147,61 @@ export default function HomePage() {
   const currentItems = isRoot ? allCourses : currentCrumb.items;
   const currentLevel = currentCrumb.kind;
 
+  // ── images state ────────────────────────────────────────────────────────
+  const [submoduleImages, setSubmoduleImages] = useState<ImageFile[]>([]);
+  const [imagesLoading, setImagesLoading] = useState(false);
+  const [confirmImage, setConfirmImage] = useState<ImageFile | null>(null);
+  const [deletingImage, setDeletingImage] = useState(false);
+
+  const isAtSubmodule = currentLevel === "step";
+
+  const loadSubmoduleImages = useCallback(async (path: string) => {
+    setImagesLoading(true);
+    try {
+      const folders = await fetchFolderImages(path);
+      const images = folders.flatMap((f) => f.images ?? []);
+      setSubmoduleImages(images);
+    } catch {
+      setSubmoduleImages([]);
+    } finally {
+      setImagesLoading(false);
+    }
+  }, []);
+
+  // Загружаем изображения каждый раз при переходе в сабмодуль
+  useEffect(() => {
+    if (isAtSubmodule) {
+      loadSubmoduleImages(buildPath(breadcrumbs));
+    } else {
+      setSubmoduleImages([]);
+    }
+  }, [breadcrumbs]); // eslint-disable-line
+
+  const handleDeleteImage = async () => {
+    if (!confirmImage) return;
+    setDeletingImage(true);
+    try {
+      // Получаем sha файла перед удалением
+      const fileContent = await fetchFileContent(
+        confirmImage.content_url,
+        confirmImage.path,
+        false,
+      );
+      await deleteImage({
+        path: confirmImage.path,
+        message: `Delete image ${confirmImage.name} via admin panel`,
+        sha: fileContent.sha,
+      });
+      toast.success("Изображение удалено");
+      setSubmoduleImages((prev) => prev.filter((img) => img.path !== confirmImage.path));
+    } catch (e: unknown) {
+      toast.error((e as Error).message ?? "Ошибка удаления изображения");
+    } finally {
+      setDeletingImage(false);
+      setConfirmImage(null);
+    }
+  };
+
   // ── load courses ─────────────────────────────────────────────────────────
   const loadCourses = useCallback(async () => {
     setLoading(true);
@@ -177,9 +224,7 @@ export default function HomePage() {
       return;
     }
 
-    // returnPath = "courseId/moduleId/submoduleId"
     const segments = returnPath.split("/").filter(Boolean);
-    // [courseId, moduleId, submoduleId]
 
     const restoreAndLoad = async () => {
       setLoading(true);
@@ -193,51 +238,30 @@ export default function HomePage() {
         ];
 
         if (segments.length >= 1) {
-          // Уровень курса
           const courseId = segments[0];
           const course = courses.find((c) => String(c.id) === courseId);
           if (course) {
-            newCrumbs.push({
-              label: course.name,
-              items: course.modules ?? [],
-              kind: "module",
-              path: courseId,
-            });
+            newCrumbs.push({ label: course.name, items: course.modules ?? [], kind: "module", path: courseId });
           }
         }
 
         if (segments.length >= 2 && newCrumbs.length === 2) {
-          // Уровень модуля
           const moduleId = segments[1];
-          const modules = newCrumbs[1].items;
-          const mod = modules.find((m) => String(m.id) === moduleId);
+          const mod = newCrumbs[1].items.find((m) => String(m.id) === moduleId);
           if (mod) {
-            newCrumbs.push({
-              label: mod.name,
-              items: mod.submodules ?? [],
-              kind: "submodule",
-              path: moduleId,
-            });
+            newCrumbs.push({ label: mod.name, items: mod.submodules ?? [], kind: "submodule", path: moduleId });
           }
         }
 
         if (segments.length >= 3 && newCrumbs.length === 3) {
-          // Уровень сабмодуля — показываем шаги
           const submoduleId = segments[2];
-          const submodules = newCrumbs[2].items;
-          const sub = submodules.find((s) => String(s.id) === submoduleId);
+          const sub = newCrumbs[2].items.find((s) => String(s.id) === submoduleId);
           if (sub) {
-            newCrumbs.push({
-              label: sub.name,
-              items: sub.steps ?? [],
-              kind: "step",
-              path: submoduleId,
-            });
+            newCrumbs.push({ label: sub.name, items: sub.steps ?? [], kind: "step", path: submoduleId });
           }
         }
 
         setBreadcrumbs(newCrumbs);
-        // Сбрасываем state чтобы при F5 не восстанавливалось ещё раз
         window.history.replaceState({}, "");
       } catch {
         toast.error("Не удалось загрузить курсы");
@@ -281,14 +305,8 @@ export default function HomePage() {
   const deleteMessage = (() => {
     if (!confirmItem) return "";
     const steps = countSteps(confirmItem);
-    const label =
-      confirmItem.kind === "step"
-        ? `Шаг ${confirmItem.number ?? confirmItem.id}`
-        : confirmItem.name;
-    const extra =
-      steps > 0
-        ? ` Будет удалено ${steps} шаг(ов) вместе со всем содержимым.`
-        : "";
+    const label = confirmItem.kind === "step" ? `Шаг ${confirmItem.number ?? confirmItem.id}` : confirmItem.name;
+    const extra = steps > 0 ? ` Будет удалено ${steps} шаг(ов) вместе со всем содержимым.` : "";
     return `Удалить «${label}»?${extra} Это действие необратимо.`;
   })();
 
@@ -318,10 +336,7 @@ export default function HomePage() {
 
         setBreadcrumbs((prev) => {
           const last = prev[prev.length - 1];
-          return [
-            ...prev.slice(0, -1),
-            { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
-          ];
+          return [...prev.slice(0, -1), { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) }];
         });
         loadCourses();
       } else {
@@ -336,9 +351,7 @@ export default function HomePage() {
           message: `Delete ${confirmItem.kind} ${confirmItem.id} via admin panel`,
         });
 
-        const kindRu =
-          confirmItem.kind === "course" ? "Курс" :
-          confirmItem.kind === "module" ? "Модуль" : "Подмодуль";
+        const kindRu = confirmItem.kind === "course" ? "Курс" : confirmItem.kind === "module" ? "Модуль" : "Подмодуль";
         toast.success(`${kindRu} удалён`);
 
         const itemIsCurrentLevel = breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
@@ -347,10 +360,7 @@ export default function HomePage() {
         } else {
           setBreadcrumbs((prev) => {
             const last = prev[prev.length - 1];
-            return [
-              ...prev.slice(0, -1),
-              { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
-            ];
+            return [...prev.slice(0, -1), { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) }];
           });
         }
         loadCourses();
@@ -527,13 +537,15 @@ export default function HomePage() {
         try {
           await createImage({ path, content: base64, message: "Upload image via admin panel" });
           toast.success("Изображение загружено");
+          // Обновить список изображений если находимся внутри сабмодуля
+          if (isAtSubmodule) loadSubmoduleImages(buildPath(breadcrumbs));
         } catch (err: unknown) {
           toast.error((err as Error).message ?? "Ошибка загрузки");
         } finally { setUploadLoading(false); }
       };
       reader.readAsDataURL(file);
     },
-    [breadcrumbs], // eslint-disable-line
+    [breadcrumbs, isAtSubmodule], // eslint-disable-line
   );
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -565,7 +577,6 @@ export default function HomePage() {
   };
 
   const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
-  const isAtSubmodule = currentLevel === "step";
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -677,7 +688,7 @@ export default function HomePage() {
           ))}
         </nav>
 
-        {/* List */}
+        {/* Steps list */}
         <div className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">
           {loading && isRoot ? "Загрузка..." : `Содержимое · ${currentItems.length} элем.`}
         </div>
@@ -706,6 +717,61 @@ export default function HomePage() {
               />
             ))}
           </ul>
+        )}
+
+        {/* Images section — показывается только внутри сабмодуля */}
+        {isAtSubmodule && (
+          <div className="mt-6">
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="text-xs font-semibold text-text-light uppercase tracking-wide">
+                Изображения · {imagesLoading ? "загрузка..." : `${submoduleImages.length} файл.`}
+              </span>
+            </div>
+
+            {imagesLoading ? (
+              <div className="flex items-center gap-2 text-text-muted text-sm py-4">
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Загрузка изображений...
+              </div>
+            ) : submoduleImages.length === 0 ? (
+              <div className="text-center py-6 text-gray-400 border border-dashed rounded-lg text-sm">
+                Нет изображений. Перетащите файл выше чтобы добавить.
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {submoduleImages.map((img) => (
+                  <div key={img.path} className="group relative rounded-lg border border-border overflow-hidden bg-gray-50">
+                    <img
+                      src={img.content_url}
+                      alt={img.name}
+                      className="w-full h-28 object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = ""; }}
+                    />
+                    <div className="p-2">
+                      <p className="text-xs text-text-muted truncate" title={img.name}>{img.name}</p>
+                    </div>
+                    <button
+                      onClick={() => setConfirmImage(img)}
+                      className="absolute top-1.5 right-1.5 p-1 bg-white/80 hover:bg-red-50 text-text-muted hover:text-red-600 rounded opacity-0 group-hover:opacity-100 transition"
+                      title="Удалить изображение"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </section>
 
@@ -842,13 +908,22 @@ export default function HomePage() {
         <Field label="Новое имя" id="rn-name" value={rnName} onChange={setRnName} required />
       </Modal>
 
-      {/* Delete confirm */}
+      {/* Delete step/dir confirm */}
       <ConfirmDialog
         open={!!confirmItem}
         message={deleteMessage}
         onConfirm={handleDeleteConfirm}
         onCancel={() => setConfirmItem(null)}
         loading={deleteLoading}
+      />
+
+      {/* Delete image confirm */}
+      <ConfirmDialog
+        open={!!confirmImage}
+        message={`Удалить изображение «${confirmImage?.name}»? Это действие необратимо.`}
+        onConfirm={handleDeleteImage}
+        onCancel={() => setConfirmImage(null)}
+        loading={deletingImage}
       />
     </div>
   );
