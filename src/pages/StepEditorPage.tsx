@@ -8,12 +8,21 @@ import { useToast } from "../hooks/useToast";
 import { fetchFileContent } from "../api/courses";
 import { updateFile, editStep, createFile, deleteFile, createImage } from "../api/mutations";
 
+export interface StepItem {
+  id: number;
+  number: number;
+  isTest: boolean;
+  contentUrl: string;
+}
+
 export interface StepEditorState {
   stepId: number;
   stepNumber: number;
   isTest: boolean;
   contentUrl: string;
   submodulePath: string;
+  steps: StepItem[];      // все шаги подмодуля
+  currentIndex: number;   // индекс текущего шага
 }
 
 export interface HomeReturnState {
@@ -50,13 +59,14 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Оригинальные значения после загрузки — для сравнения dirty
+  // ── HTML превью ────────────────────────────────────────────────────────
+  const [showHtml, setShowHtml] = useState(false);
+
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
   const [toggling, setToggling] = useState(false);
 
@@ -91,28 +101,24 @@ export default function StepEditorPage() {
     reader.readAsDataURL(file);
   }, [state]); // eslint-disable-line
 
-  // ── Load content ───────────────────────────────────────────────────────────────
-  const loadContent = useCallback(async () => {
-    if (!state) return;
+  // ── Load content ────────────────────────────────────────────────────────────
+  const loadContent = useCallback(async (s: StepEditorState) => {
     setLoading(true);
     setDirty(false);
+    setShowHtml(false);
     try {
-      const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
-      const res = await fetchFileContent(state.contentUrl, fileContentPath, state.isTest);
+      const fileContentPath = `${s.submodulePath}/${s.stepId}.txt`;
+      const res = await fetchFileContent(s.contentUrl, fileContentPath, s.isTest);
       setFileSha(res.sha ?? "");
-      if (state.isTest) {
+      if (s.isTest) {
         const raw = res.content.data;
         let parsed: TestData = emptyTest();
         if (typeof raw === "string") {
-          try {
-            const p = JSON.parse(raw);
-            if (p && "question" in p) parsed = p as TestData;
-          } catch { /* ignore */ }
+          try { const p = JSON.parse(raw); if (p && "question" in p) parsed = p as TestData; } catch { /* ignore */ }
         } else if (raw && typeof raw === "object" && "question" in raw) {
           parsed = raw as TestData;
         }
         setTestData(parsed);
-        // Сохраняем оригинал для сравнения
         initialTestData.current = JSON.stringify(parsed);
       } else {
         const html = typeof res.content.data === "string" ? res.content.data : "";
@@ -126,9 +132,10 @@ export default function StepEditorPage() {
     }
   }, []); // eslint-disable-line
 
-  useEffect(() => { loadContent(); }, [loadContent]);
+  useEffect(() => {
+    if (state) loadContent(state);
+  }, [loadContent]); // eslint-disable-line
 
-  // Обновление dirty через сравнение с оригиналом
   const handleTestChange = (d: TestData) => {
     setTestData(d);
     setDirty(JSON.stringify(d) !== initialTestData.current);
@@ -139,21 +146,47 @@ export default function StepEditorPage() {
     setDirty(html !== initialHtml.current);
   };
 
+  // ── Navigation between steps ──────────────────────────────────────────
+  const navigateToStep = (newIndex: number) => {
+    if (!state) return;
+    const target = state.steps[newIndex];
+    const newState: StepEditorState = {
+      stepId: target.id,
+      stepNumber: target.number,
+      isTest: target.isTest,
+      contentUrl: target.contentUrl,
+      submodulePath: state.submodulePath,
+      steps: state.steps,
+      currentIndex: newIndex,
+    };
+    // Обновляем location.state без navigate, чтобы не плодить history
+    window.history.replaceState(newState, "");
+    setIsTest(target.isTest);
+    setHtmlContent("");
+    setTestData(emptyTest());
+    loadContent(newState);
+  };
+
+  const canPrev = state && state.currentIndex > 0;
+  const canNext = state && state.currentIndex < state.steps.length - 1;
+
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
-    const filePath = `${state.submodulePath}/${state.stepId}.txt`;
+    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
+    const filePath = `${state.submodulePath}/${stepId}.txt`;
     const contentToSave = isTest ? JSON.stringify(testData, null, 2) : htmlContent;
     try {
       if (fileSha) {
-        await updateFile({ path: filePath, content: contentToSave, message: `Update step ${state.stepId} via admin panel`, sha: fileSha });
+        await updateFile({ path: filePath, content: contentToSave, message: `Update step ${stepId} via admin panel`, sha: fileSha });
       } else {
-        await createFile({ path: filePath, content: contentToSave, message: `Create step ${state.stepId} via admin panel`, image: false, is_test: isTest });
+        await createFile({ path: filePath, content: contentToSave, message: `Create step ${stepId} via admin panel`, image: false, is_test: isTest });
       }
       toast.success("Шаг сохранён");
       setDirty(false);
-      await loadContent();
+      const currentState = window.history.state as StepEditorState;
+      await loadContent(currentState ?? state);
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка сохранения");
     } finally {
@@ -165,9 +198,10 @@ export default function StepEditorPage() {
   const handleToggleConfirm = async () => {
     if (!state) return;
     setToggling(true);
+    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
     const newIsTest = !isTest;
     try {
-      await editStep(state.stepId, newIsTest);
+      await editStep(stepId, newIsTest);
       setIsTest(newIsTest);
       if (newIsTest) {
         const empty = emptyTest();
@@ -191,8 +225,9 @@ export default function StepEditorPage() {
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
+    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
     try {
-      await deleteFile({ stepId: state.stepId, path: `${state.submodulePath}/${state.stepId}`, message: `Delete step ${state.stepId} via admin panel`, sha: fileSha });
+      await deleteFile({ stepId, path: `${state.submodulePath}/${stepId}`, message: `Delete step ${stepId} via admin panel`, sha: fileSha });
       toast.success("Шаг удалён");
       navigate("/", { replace: true, state: { returnPath: state.submodulePath } as HomeReturnState });
     } catch (e: unknown) {
@@ -204,22 +239,52 @@ export default function StepEditorPage() {
 
   if (!state) return null;
 
+  const currentStepNumber = state.steps[state.currentIndex]?.number ?? state.stepNumber;
+
   return (
     <div className="flex flex-col h-full">
       <ToastContainer toasts={toast.toasts} />
-
       <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
 
       {/* Top bar */}
       <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
+
+        {/* Назад */}
         <button onClick={goBack} className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition" title="Назад">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
 
+        {/* Навигация по шагам */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => canPrev && navigateToStep(state.currentIndex - 1)}
+            disabled={!canPrev || loading}
+            className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Предыдущий шаг"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <span className="text-xs text-text-muted tabular-nums">
+            {state.currentIndex + 1} / {state.steps.length}
+          </span>
+          <button
+            onClick={() => canNext && navigateToStep(state.currentIndex + 1)}
+            disabled={!canNext || loading}
+            className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Следующий шаг"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold text-text-heading truncate">Шаг {state.stepNumber}</h1>
+          <h1 className="text-base font-semibold text-text-heading truncate">Шаг {currentStepNumber}</h1>
           <p className="text-xs text-text-muted">{state.submodulePath}</p>
         </div>
 
@@ -250,6 +315,22 @@ export default function StepEditorPage() {
             </>
           )}
         </button>
+
+        {/* HTML превью — только для теории */}
+        {!isTest && (
+          <button
+            onClick={() => setShowHtml((v) => !v)}
+            disabled={loading}
+            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition disabled:opacity-50 ${
+              showHtml
+                ? "bg-gray-800 text-white border-gray-800"
+                : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
+            }`}
+            title="Просмотр HTML-кода"
+          >
+            &lt;/&gt;
+          </button>
+        )}
 
         {dirty && (
           <span className="text-xs text-orange-500 font-medium">Несохранённые изменения</span>
@@ -306,10 +387,18 @@ export default function StepEditorPage() {
             Загрузка содержимого...
           </div>
         ) : isTest ? (
-          <TestEditor
-            data={testData}
-            onChange={handleTestChange}
-          />
+          <TestEditor data={testData} onChange={handleTestChange} />
+        ) : showHtml ? (
+          // ── HTML превью ──
+          <div className="relative">
+            <pre className="bg-gray-900 text-green-400 text-xs font-mono p-4 rounded-lg overflow-x-auto whitespace-pre-wrap break-all min-h-[300px]">{htmlContent}</pre>
+            <button
+              onClick={() => { navigator.clipboard.writeText(htmlContent); toast.success("Скопировано"); }}
+              className="absolute top-3 right-3 text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded transition"
+            >
+              Скопировать
+            </button>
+          </div>
         ) : (
           <TiptapEditor
             ref={editorRef}
@@ -327,10 +416,9 @@ export default function StepEditorPage() {
         onCancel={() => setShowToggleConfirm(false)}
         loading={toggling}
       />
-
       <ConfirmDialog
         open={showDeleteConfirm}
-        message={`Удалить «Шаг ${state.stepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
+        message={`Удалить «Шаг ${currentStepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
         onConfirm={handleDeleteStep}
         onCancel={() => setShowDeleteConfirm(false)}
         loading={deleting}
