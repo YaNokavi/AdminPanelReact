@@ -12,11 +12,11 @@
 
 ## Репозитории
 
-| Репозиторий | Назначение |
-|---|---|
+| Репозиторий                                                             | Назначение                                                     |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------- |
 | [YaNokavi/AdminPanelReact](https://github.com/YaNokavi/AdminPanelReact) | **Текущая версия** — React + TypeScript. В активной разработке |
-| [YaNokavi/adminCunaedu](https://github.com/YaNokavi/adminCunaedu) | **Старая версия** — ванильный JS. Эталон функционала |
-| [YaNokavi/CunaEduFile](https://github.com/YaNokavi/CunaEduFile) | Git-хранилище контента файлов (HTML/JSON шагов, изображения) |
+| [YaNokavi/adminCunaedu](https://github.com/YaNokavi/adminCunaedu)       | **Старая версия** — ванильный JS. Эталон функционала           |
+| [YaNokavi/CunaEduFile](https://github.com/YaNokavi/CunaEduFile)         | Git-хранилище контента файлов (HTML/JSON шагов, изображения)   |
 
 ---
 
@@ -67,12 +67,12 @@ courses/{courseId}/{moduleId}/{submoduleId}/images/{filename}
 
 > ⚠️ Реальные имена таблиц отличаются от того, что используется внутри `processQuery` в `server.js`. Всегда используй имена ниже в новых запросах.
 
-| Таблица | Ключевые поля |
-|---|---|
-| `course` | `id`, `name`, `author`, `description`, `rating`, `iconurl` |
-| `course_module` | `id`, `name`, `courseid` |
-| `submodule` | `id`, `name`, `moduleid` |
-| `submodule_step` | `id`, `submoduleid`, `courseid`, `contenturl`, `istest` |
+| Таблица               | Ключевые поля                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| `course`              | `id`, `name`, `author`, `description`, `rating`, `iconurl`                                  |
+| `course_module`       | `id`, `name`, `courseid`                                                                    |
+| `submodule`           | `id`, `name`, `moduleid`                                                                    |
+| `submodule_step`      | `id`, `submoduleid`, `courseid`, `contenturl`, `istest`                                     |
 | `migration.migration` | `id`, `courseid`, `moduleid`, `submoduleid`, `stepid`, `sql`, `action`, `version`, `islast` |
 
 **FK-ограничение:** `submodule_step.courseid` → `course.id` (с именем `fk_submodule_step_course_id`). При удалении курса нужно сначала удалить записи из `submodule_step`.
@@ -81,15 +81,15 @@ courses/{courseId}/{moduleId}/{submoduleId}/images/{filename}
 
 ## Стек фронтенда (AdminPanelReact)
 
-| Технология | Версия | Роль |
-|---|---|---|
-| React | 19 | UI-фреймворк |
-| TypeScript | ~5.9 | Типизация |
-| Vite | 8 | Сборщик |
-| Tailwind CSS | 3.4 | Стилизация |
-| react-router-dom | v7 (HashRouter) | Роутинг |
-| TipTap | 2.11 | Rich-text редактор |
-| gh-pages | 6 | Деплой на GitHub Pages |
+| Технология       | Версия          | Роль                   |
+| ---------------- | --------------- | ---------------------- |
+| React            | 19              | UI-фреймворк           |
+| TypeScript       | ~5.9            | Типизация              |
+| Vite             | 8               | Сборщик                |
+| Tailwind CSS     | 3.4             | Стилизация             |
+| react-router-dom | v7 (HashRouter) | Роутинг                |
+| TipTap           | 2.11            | Rich-text редактор     |
+| gh-pages         | 6               | Деплой на GitHub Pages |
 
 ### Кастомные цвета Tailwind
 
@@ -151,14 +151,14 @@ src/
 
 ## Роутинг
 
-| Путь | Компонент | Защищён |
-|---|---|---|
-| `/login` | LoginPage | Нет |
-| `/` | HomePage | Да (RequireAuth) |
-| `/step-editor` | StepEditorPage | Да |
-| `/faq` | FAQPage | Да |
-| `/contacts` | ContactsPage | Да |
-| `/*` | NotFoundPage | Да |
+| Путь           | Компонент      | Защищён          |
+| -------------- | -------------- | ---------------- |
+| `/login`       | LoginPage      | Нет              |
+| `/`            | HomePage       | Да (RequireAuth) |
+| `/step-editor` | StepEditorPage | Да               |
+| `/faq`         | FAQPage        | Да               |
+| `/contacts`    | ContactsPage   | Да               |
+| `/*`           | NotFoundPage   | Да               |
 
 Переход на `/step-editor` происходит через `navigate("/step-editor", { state: StepEditorState })` из `HomePage` при клике на шаг.
 
@@ -169,8 +169,8 @@ interface StepEditorState {
   stepId: number;
   stepNumber: number;
   isTest: boolean;
-  contentUrl: string;      // raw GitHub URL для загрузки контента
-  submodulePath: string;   // "{courseId}/{moduleId}/{submoduleId}"
+  contentUrl: string; // raw GitHub URL для загрузки контента
+  submodulePath: string; // "{courseId}/{moduleId}/{submoduleId}"
 }
 ```
 
@@ -187,24 +187,24 @@ interface StepEditorState {
 
 ## API эндпоинты бэкенда
 
-| Метод | Путь | Описание |
-|---|---|---|
-| POST | `/api/login` | Авторизация |
-| GET | `/api/courses?path=&type=` | Иерархия (type: Курсы/Модули/Сабмодули/Шаги) |
-| GET | `/api/folder-images?path=` | Список папок с изображениями |
-| GET | `/api/file-content?fileUrl=&filePath=&fileType=` | Контент файла с GitHub + SHA |
-| PUT | `/api/update-file` | Обновить файл на GitHub |
-| POST | `/api/create-file` | Создать шаг (DB + GitHub) |
-| POST | `/api/create-image` | Загрузить изображение на GitHub |
-| DELETE | `/api/delete-file` | Удалить шаг (DB + GitHub) |
-| DELETE | `/api/delete-image` | Удалить изображение с GitHub |
-| DELETE | `/api/delete-directory` | Удалить курс/модуль/подмодуль (DB + GitHub рекурсивно) |
-| POST | `/api/edit-step?stepId=&isTest=` | Сменить тип шага |
-| POST | `/api/create-directory` | Создать модуль или подмодуль (DB + GitHub) |
-| POST | `/api/create-course` | Создать курс (DB + GitHub) |
-| POST | `/api/edit-course` | Редактировать метаданные курса |
-| PUT | `/api/rename` | Переименовать курс/модуль/подмодуль |
-| GET | `/api/generate-migration` | Скачать `.sql` миграцию (Liquibase-формат) |
+| Метод  | Путь                                             | Описание                                               |
+| ------ | ------------------------------------------------ | ------------------------------------------------------ |
+| POST   | `/api/login`                                     | Авторизация                                            |
+| GET    | `/api/courses?path=&type=`                       | Иерархия (type: Курсы/Модули/Сабмодули/Шаги)           |
+| GET    | `/api/folder-images?path=`                       | Список папок с изображениями                           |
+| GET    | `/api/file-content?fileUrl=&filePath=&fileType=` | Контент файла с GitHub + SHA                           |
+| PUT    | `/api/update-file`                               | Обновить файл на GitHub                                |
+| POST   | `/api/create-file`                               | Создать шаг (DB + GitHub)                              |
+| POST   | `/api/create-image`                              | Загрузить изображение на GitHub                        |
+| DELETE | `/api/delete-file`                               | Удалить шаг (DB + GitHub)                              |
+| DELETE | `/api/delete-image`                              | Удалить изображение с GitHub                           |
+| DELETE | `/api/delete-directory`                          | Удалить курс/модуль/подмодуль (DB + GitHub рекурсивно) |
+| POST   | `/api/edit-step?stepId=&isTest=`                 | Сменить тип шага                                       |
+| POST   | `/api/create-directory`                          | Создать модуль или подмодуль (DB + GitHub)             |
+| POST   | `/api/create-course`                             | Создать курс (DB + GitHub)                             |
+| POST   | `/api/edit-course`                               | Редактировать метаданные курса                         |
+| PUT    | `/api/rename`                                    | Переименовать курс/модуль/подмодуль                    |
+| GET    | `/api/generate-migration`                        | Скачать `.sql` миграцию (Liquibase-формат)             |
 
 ### DELETE /api/delete-directory
 
@@ -224,6 +224,7 @@ interface StepEditorState {
 **Порт:** 8080
 
 **CORS разрешён для:**
+
 - `https://cunaedu.online`
 - `https://en.cunaedu.online`
 - `http://127.0.0.1:5500`, `5501`
@@ -255,22 +256,20 @@ interface StepEditorState {
 ## Формат контента шагов
 
 ### Теория
+
 Обычный HTML (`<p>`, `<h1>`, `<ul>`, `<strong>` и т.д.), созданный TipTap. Хранится как `.txt` файл на GitHub.
 
 ### Тест
+
 JSON-файл следующей структуры:
+
 ```json
 {
-  "questions": [
-    {
-      "question": "Текст вопроса",
-      "answers": ["Вариант 1", "Вариант 2", "Вариант 3", "Вариант 4"],
-      "correctAnswer": 0
-    }
-  ]
+  "question": "Текст вопроса",
+  "options": ["Вариант 1", "Вариант 2", "Вариант 3", "Вариант 4"],
+  "answer": ["Вариант 2"]
 }
 ```
-`correctAnswer` — индекс правильного ответа в массиве `answers`.
 
 ---
 
@@ -279,16 +278,19 @@ JSON-файл следующей структуры:
 ### delete-file vs остальные
 
 Бэкенд в `/api/delete-file` **сам дописывает `.txt`** к пути:
+
 ```js
-let gitUrl = `https://api.github.com/.../courses/${path}.txt`
+let gitUrl = `https://api.github.com/.../courses/${path}.txt`;
 ```
+
 Поэтому с фронта нужно передавать путь **без `.txt`**:
+
 ```ts
 // Правильно:
-path: `${submodulePath}/${stepId}`        // → "1/2/3/42" → бэкенд делает "1/2/3/42.txt"
+path: `${submodulePath}/${stepId}`; // → "1/2/3/42" → бэкенд делает "1/2/3/42.txt"
 
 // Для fetchFileContent, updateFile, createFile — с .txt:
-path: `${submodulePath}/${stepId}.txt`
+path: `${submodulePath}/${stepId}.txt`;
 ```
 
 ---
@@ -296,11 +298,13 @@ path: `${submodulePath}/${stepId}.txt`
 ## Переменные окружения
 
 ### Фронт (`.env` / `.env.example`)
+
 ```
 VITE_API_URL=https://admincuna-back-anderm.amvera.io
 ```
 
 ### Бэкенд (`.env`)
+
 ```
 PGUSER=
 PGHOST=
@@ -339,7 +343,6 @@ PASSWORD=...
 ### ❌ Не реализовано
 
 - Переупорядочивание шагов (кнопки ↑↓ или drag-n-drop)
-- Переименование шага
 - Preview шага (предпросмотр HTML)
 - Удаление изображения через UI
 
