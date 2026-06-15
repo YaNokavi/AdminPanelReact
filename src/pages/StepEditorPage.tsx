@@ -59,9 +59,10 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  // Базовые значения — устанавливаются после того, как TipTap
+  // прочитал и нормализовал HTML (через setTimeout + editorRef.getHTML)
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
-  const pendingInitRef = useRef(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -141,14 +142,11 @@ export default function StepEditorPage() {
     [state],
   ); // eslint-disable-line
 
-  // ── Load content ─────────────────────────────────────────────────────────────
-  // 】 location.key — уникален при каждом navigate(), даже на тот же маршрут.
-  // Поэтому используем его как зависимость — перезагрузка срабатывает при каждом
-  // повторном открытии шага, даже если компонент не был размонтирован.
+  // ── Загрузка при каждом новом navigate() ──────────────────────────────────────
   useEffect(() => {
     if (!state) return;
 
-    // Сбрасываем все состояния перед загрузкой
+    // Полный сброс состояния
     setIsTest(state.isTest);
     setHtmlContent("");
     setTestData(emptyTest());
@@ -157,7 +155,6 @@ export default function StepEditorPage() {
     setLoading(true);
     initialHtml.current = "";
     initialTestData.current = "";
-    pendingInitRef.current = false;
 
     const run = async () => {
       try {
@@ -168,6 +165,7 @@ export default function StepEditorPage() {
           state.isTest,
         );
         setFileSha(res.sha ?? "");
+
         if (state.isTest) {
           const raw = res.content.data;
           let parsed: TestData = emptyTest();
@@ -183,8 +181,18 @@ export default function StepEditorPage() {
           initialTestData.current = JSON.stringify(parsed);
         } else {
           const html = typeof res.content.data === "string" ? res.content.data : "";
-          pendingInitRef.current = true;
           setHtmlContent(html);
+
+          // Ждём два тика евентлупа:
+          // 1й — React перерендеривает TiptapEditor с новым content
+          // 2й — useEffect внутри TiptapEditor запускает setContent()
+          // После этого editorRef.getHTML() вернёт нормализованный HTML
+          await Promise.resolve();
+          await Promise.resolve();
+
+          const normalized = editorRef.current?.getHTML() ?? html;
+          initialHtml.current = normalized;
+          setDirty(false);
         }
       } catch (e: unknown) {
         toast.error((e as Error).message ?? "Не удалось загрузить шаг");
@@ -196,7 +204,7 @@ export default function StepEditorPage() {
     run();
   }, [location.key]); // eslint-disable-line
 
-  // ── loadContent — используется только после сохранения для обновления SHA
+  // Перезагрузка после сохранения — обновляет SHA без сброса редактора
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
@@ -224,8 +232,12 @@ export default function StepEditorPage() {
         initialTestData.current = JSON.stringify(parsed);
       } else {
         const html = typeof res.content.data === "string" ? res.content.data : "";
-        pendingInitRef.current = true;
         setHtmlContent(html);
+        await Promise.resolve();
+        await Promise.resolve();
+        const normalized = editorRef.current?.getHTML() ?? html;
+        initialHtml.current = normalized;
+        setDirty(false);
       }
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось загрузить шаг");
@@ -234,24 +246,14 @@ export default function StepEditorPage() {
     }
   }, [state]); // eslint-disable-line
 
-  const handleEditorReady = useCallback((normalizedHtml: string) => {
-    if (pendingInitRef.current) {
-      initialHtml.current = normalizedHtml;
-      pendingInitRef.current = false;
-      setDirty(false);
-    }
-  }, []);
+  const handleHtmlChange = (html: string) => {
+    setHtmlContent(html);
+    setDirty(html !== initialHtml.current);
+  };
 
   const handleTestChange = (d: TestData) => {
     setTestData(d);
     setDirty(JSON.stringify(d) !== initialTestData.current);
-  };
-
-  const handleHtmlChange = (html: string) => {
-    setHtmlContent(html);
-    if (!pendingInitRef.current) {
-      setDirty(html !== initialHtml.current);
-    }
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -371,7 +373,6 @@ export default function StepEditorPage() {
           <p className="text-xs text-text-muted">{state.submodulePath}</p>
         </div>
 
-        {/* Step type badge */}
         <button
           onClick={() => setShowToggleConfirm(true)}
           disabled={loading || toggling}
@@ -466,7 +467,6 @@ export default function StepEditorPage() {
             content={htmlContent}
             onChange={handleHtmlChange}
             onInsertImageRequest={handleInsertImageRequest}
-            onReady={handleEditorReady}
           />
         )}
       </div>
