@@ -13,6 +13,7 @@ export interface TiptapEditorRef {
 interface Props {
   content: string;
   onChange: (html: string) => void;
+  onInsertImageRequest?: () => void;
 }
 
 const btnCls = (active: boolean) =>
@@ -23,7 +24,7 @@ const btnCls = (active: boolean) =>
   }`;
 
 const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
-  { content, onChange },
+  { content, onChange, onInsertImageRequest },
   ref
 ) {
   const editor = useEditor({
@@ -40,14 +41,12 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     },
   });
 
-  // Пробрасываем insertImage наружу через ref
   useImperativeHandle(ref, () => ({
     insertImage(url: string) {
       editor?.chain().focus().setImage({ src: url }).run();
     },
   }), [editor]);
 
-  // Sync external content changes
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content, false);
@@ -84,6 +83,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
         <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={btnCls(editor.isActive("codeBlock"))} title="Код">{"</>"}  </button>
         <div className="w-px bg-gray-300 mx-1" />
         <button type="button" onClick={setLink} className={btnCls(editor.isActive("link"))} title="Ссылка">🔗</button>
+        {onInsertImageRequest && (
+          <button type="button" onClick={onInsertImageRequest} className={btnCls(false)} title="Вставить изображение">🖼</button>
+        )}
         <div className="w-px bg-gray-300 mx-1" />
         <button type="button" onClick={() => editor.chain().focus().undo().run()} className={btnCls(false)} title="Отменить">↩</button>
         <button type="button" onClick={() => editor.chain().focus().redo().run()} className={btnCls(false)} title="Повторить">↪</button>
