@@ -16,6 +16,12 @@ export interface StepEditorState {
   submodulePath: string; // e.g. "courseId/moduleId/submoduleId"
 }
 
+const emptyTest = (): TestData => ({
+  question: "",
+  options: ["", "", "", ""],
+  answer: [],
+});
+
 export default function StepEditorPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -29,7 +35,7 @@ export default function StepEditorPage() {
 
   const [isTest, setIsTest] = useState(state?.isTest ?? false);
   const [htmlContent, setHtmlContent] = useState("");
-  const [testData, setTestData] = useState<TestData>({ questions: [] });
+  const [testData, setTestData] = useState<TestData>(emptyTest());
   const [fileSha, setFileSha] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,7 +62,6 @@ export default function StepEditorPage() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const base64 = (ev.target?.result as string).split(",")[1];
-      // Кладём в images/ папку подмодуля
       const imagePath = `${state.submodulePath}/images/${file.name}`;
       const rawUrl = `https://raw.githubusercontent.com/YaNokavi/CunaEduFile/refs/heads/main/courses/${imagePath}`;
       try {
@@ -65,7 +70,6 @@ export default function StepEditorPage() {
           content: base64,
           message: `Upload image ${file.name} via admin panel`,
         });
-        // Вставляем в редактор через ref
         editorRef.current?.insertImage(rawUrl);
         setDirty(true);
         toast.success("Изображение вставлено");
@@ -73,14 +77,13 @@ export default function StepEditorPage() {
         toast.error((err as Error).message ?? "Ошибка загрузки изображения");
       } finally {
         setImageUploading(false);
-        // Сбрасываем input чтобы можно загрузить то же фото ещё раз
         if (imageInputRef.current) imageInputRef.current.value = "";
       }
     };
     reader.readAsDataURL(file);
   }, [state]); // eslint-disable-line
 
-  // ── Load content ───────────────────────────────────────────────────────────────
+  // ── Load content ──────────────────────────────────────────────────────────────
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
@@ -91,9 +94,21 @@ export default function StepEditorPage() {
       if (state.isTest) {
         const raw = res.content.data;
         if (typeof raw === "string") {
-          try { setTestData(JSON.parse(raw)); } catch { setTestData({ questions: [] }); }
-        } else {
+          try {
+            const parsed = JSON.parse(raw);
+            // Поддержка старого формата { questions: [...] } — берём первый вопрос
+            if (parsed.questions && Array.isArray(parsed.questions)) {
+              setTestData(emptyTest());
+            } else {
+              setTestData(parsed as TestData);
+            }
+          } catch {
+            setTestData(emptyTest());
+          }
+        } else if (raw && typeof raw === "object" && "question" in raw) {
           setTestData(raw as TestData);
+        } else {
+          setTestData(emptyTest());
         }
       } else {
         setHtmlContent(typeof res.content.data === "string" ? res.content.data : "");
@@ -141,13 +156,15 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ───────────────────────────────────────────────────
+  // ── Toggle test/theory ────────────────────────────────────────────────────────
   const handleToggleType = async () => {
     if (!state) return;
     const newIsTest = !isTest;
     try {
       await editStep(state.stepId, newIsTest);
       setIsTest(newIsTest);
+      if (newIsTest) setTestData(emptyTest());
+      else setHtmlContent("");
       toast.success(`Тип изменён на «${newIsTest ? "Тест" : "Теория"}»`);
       setDirty(true);
     } catch (e: unknown) {
@@ -155,7 +172,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ─────────────────────────────────────────────────────────────
+  // ── Delete step ──────────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
