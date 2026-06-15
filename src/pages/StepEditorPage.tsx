@@ -112,19 +112,20 @@ export default function StepEditorPage() {
     if (!state) return;
     setSaving(true);
     const filePath = `${state.submodulePath}/${state.stepId}.txt`;
+    // Отправляем plain text — бэкенд сам кодирует в base64 для GitHub API
     const contentToSave = isTest ? JSON.stringify(testData, null, 2) : htmlContent;
     try {
       if (fileSha) {
         await updateFile({
           path: filePath,
-          content: btoa(unescape(encodeURIComponent(contentToSave))),
+          content: contentToSave,
           message: `Update step ${state.stepId} via admin panel`,
           sha: fileSha,
         });
       } else {
         await createFile({
           path: filePath,
-          content: btoa(unescape(encodeURIComponent(contentToSave))),
+          content: contentToSave,
           message: `Create step ${state.stepId} via admin panel`,
           image: false,
           is_test: isTest,
