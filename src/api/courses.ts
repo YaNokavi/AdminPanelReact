@@ -70,30 +70,61 @@ export interface FileContentResponse {
   sha: string;
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** PostgreSQL jsonagg возвращает [null] для пустого LEFT JOIN — фильтруем */
+function filterNullSteps(steps: (Step | null)[] | null): Step[] {
+  if (!steps) return [];
+  return steps.filter((s): s is Step => s !== null && s.id !== null && s.id !== undefined);
+}
+
 // ─── API Calls ───────────────────────────────────────────────────────────────
 
 export async function fetchCourses(path = "", type: FileType = "Курсы"): Promise<Course[]> {
-  return apiFetch<Course[]>(
+  const data = await apiFetch<Course[]>(
     `/api/courses?path=${encodeURIComponent(path)}&type=${encodeURIComponent(type)}`,
   );
+  // Рекурсивно чистим null-шаги на всех уровнях
+  return data.map((course) => ({
+    ...course,
+    modules: course.modules?.map((mod) => ({
+      ...mod,
+      submodules: mod.submodules?.map((sub) => ({
+        ...sub,
+        steps: filterNullSteps(sub.steps as (Step | null)[] | null),
+      })) ?? null,
+    })) ?? null,
+  }));
 }
 
 export async function fetchModules(path: string): Promise<CourseModule[]> {
-  return apiFetch<CourseModule[]>(
+  const data = await apiFetch<CourseModule[]>(
     `/api/courses?path=${encodeURIComponent(path)}&type=${encodeURIComponent("Модули")}`,
   );
+  return data.map((mod) => ({
+    ...mod,
+    submodules: mod.submodules?.map((sub) => ({
+      ...sub,
+      steps: filterNullSteps(sub.steps as (Step | null)[] | null),
+    })) ?? null,
+  }));
 }
 
 export async function fetchSubmodules(path: string): Promise<Submodule[]> {
-  return apiFetch<Submodule[]>(
+  const data = await apiFetch<Submodule[]>(
     `/api/courses?path=${encodeURIComponent(path)}&type=${encodeURIComponent("Сабмодули")}`,
   );
+  return data.map((sub) => ({
+    ...sub,
+    steps: filterNullSteps(sub.steps as (Step | null)[] | null),
+  }));
 }
 
 export async function fetchSteps(path: string): Promise<Step[]> {
-  return apiFetch<Step[]>(
+  const data = await apiFetch<(Step | null)[]>(
     `/api/courses?path=${encodeURIComponent(path)}&type=${encodeURIComponent("Шаги")}`,
   );
+  return filterNullSteps(data);
 }
 
 export async function fetchFolderImages(path: string): Promise<FolderImages[]> {
