@@ -6,14 +6,13 @@ import ToastContainer from "../components/ToastContainer";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useToast } from "../hooks/useToast";
 import { fetchFileContent } from "../api/courses";
-import { updateFile, editStep, createFile, deleteFile, createImage } from "../api/mutations";
-
-export interface StepItem {
-  id: number;
-  number: number;
-  isTest: boolean;
-  contentUrl: string;
-}
+import {
+  updateFile,
+  editStep,
+  createFile,
+  deleteFile,
+  createImage,
+} from "../api/mutations";
 
 export interface StepEditorState {
   stepId: number;
@@ -21,8 +20,6 @@ export interface StepEditorState {
   isTest: boolean;
   contentUrl: string;
   submodulePath: string;
-  steps: StepItem[];      // все шаги подмодуля
-  currentIndex: number;   // индекс текущего шага
 }
 
 export interface HomeReturnState {
@@ -47,8 +44,13 @@ export default function StepEditorPage() {
   }, []); // eslint-disable-line
 
   const goBack = () => {
-    if (!state) { navigate("/"); return; }
-    navigate("/", { state: { returnPath: state.submodulePath } as HomeReturnState });
+    if (!state) {
+      navigate("/");
+      return;
+    }
+    navigate("/", {
+      state: { returnPath: state.submodulePath } as HomeReturnState,
+    });
   };
 
   const [isTest, setIsTest] = useState(state?.isTest ?? false);
@@ -59,14 +61,13 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // ── HTML превью ────────────────────────────────────────────────────────
-  const [showHtml, setShowHtml] = useState(false);
-
+  // Оригинальные значения после загрузки — для сравнения dirty
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
   const [toggling, setToggling] = useState(false);
 
@@ -76,52 +77,73 @@ export default function StepEditorPage() {
 
   const handleInsertImageRequest = () => imageInputRef.current?.click();
 
-  const handleImageFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !state) return;
-    if (!file.type.startsWith("image/")) { toast.error("Только изображения"); return; }
-    setImageUploading(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = (ev.target?.result as string).split(",")[1];
-      const imagePath = `${state.submodulePath}/images/${file.name}`;
-      const rawUrl = `https://raw.githubusercontent.com/YaNokavi/CunaEduFile/refs/heads/main/courses/${imagePath}`;
-      try {
-        await createImage({ path: imagePath, content: base64, message: `Upload image ${file.name} via admin panel` });
-        editorRef.current?.insertImage(rawUrl);
-        setDirty(true);
-        toast.success("Изображение вставлено");
-      } catch (err: unknown) {
-        toast.error((err as Error).message ?? "Ошибка загрузки изображения");
-      } finally {
-        setImageUploading(false);
-        if (imageInputRef.current) imageInputRef.current.value = "";
+  const handleImageFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file || !state) return;
+      if (!file.type.startsWith("image/")) {
+        toast.error("Только изображения");
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-  }, [state]); // eslint-disable-line
+      setImageUploading(true);
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const base64 = (ev.target?.result as string).split(",")[1];
+        const imagePath = `${state.submodulePath}/images/${file.name}`;
+        const rawUrl = `https://raw.githubusercontent.com/YaNokavi/CunaEduFile/refs/heads/main/courses/${imagePath}`;
+        try {
+          await createImage({
+            path: imagePath,
+            content: base64,
+            message: `Upload image ${file.name} via admin panel`,
+          });
+          editorRef.current?.insertImage(rawUrl);
+          setDirty(true);
+          toast.success("Изображение вставлено");
+        } catch (err: unknown) {
+          toast.error((err as Error).message ?? "Ошибка загрузки изображения");
+        } finally {
+          setImageUploading(false);
+          if (imageInputRef.current) imageInputRef.current.value = "";
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [state],
+  ); // eslint-disable-line
 
-  // ── Load content ────────────────────────────────────────────────────────────
-  const loadContent = useCallback(async (s: StepEditorState) => {
+  // ── Load content ───────────────────────────────────────────────────────────────
+  const loadContent = useCallback(async () => {
+    if (!state) return;
     setLoading(true);
     setDirty(false);
-    setShowHtml(false);
     try {
-      const fileContentPath = `${s.submodulePath}/${s.stepId}.txt`;
-      const res = await fetchFileContent(s.contentUrl, fileContentPath, s.isTest);
+      const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
+      const res = await fetchFileContent(
+        state.contentUrl,
+        fileContentPath,
+        state.isTest,
+      );
       setFileSha(res.sha ?? "");
-      if (s.isTest) {
+      if (state.isTest) {
         const raw = res.content.data;
         let parsed: TestData = emptyTest();
         if (typeof raw === "string") {
-          try { const p = JSON.parse(raw); if (p && "question" in p) parsed = p as TestData; } catch { /* ignore */ }
+          try {
+            const p = JSON.parse(raw);
+            if (p && "question" in p) parsed = p as TestData;
+          } catch {
+            /* ignore */
+          }
         } else if (raw && typeof raw === "object" && "question" in raw) {
           parsed = raw as TestData;
         }
         setTestData(parsed);
+        // Сохраняем оригинал для сравнения
         initialTestData.current = JSON.stringify(parsed);
       } else {
-        const html = typeof res.content.data === "string" ? res.content.data : "";
+        const html =
+          typeof res.content.data === "string" ? res.content.data : "";
         setHtmlContent(html);
         initialHtml.current = html;
       }
@@ -133,9 +155,10 @@ export default function StepEditorPage() {
   }, []); // eslint-disable-line
 
   useEffect(() => {
-    if (state) loadContent(state);
-  }, [loadContent]); // eslint-disable-line
+    loadContent();
+  }, [loadContent]);
 
+  // Обновление dirty через сравнение с оригиналом
   const handleTestChange = (d: TestData) => {
     setTestData(d);
     setDirty(JSON.stringify(d) !== initialTestData.current);
@@ -146,47 +169,34 @@ export default function StepEditorPage() {
     setDirty(html !== initialHtml.current);
   };
 
-  // ── Navigation between steps ──────────────────────────────────────────
-  const navigateToStep = (newIndex: number) => {
-    if (!state) return;
-    const target = state.steps[newIndex];
-    const newState: StepEditorState = {
-      stepId: target.id,
-      stepNumber: target.number,
-      isTest: target.isTest,
-      contentUrl: target.contentUrl,
-      submodulePath: state.submodulePath,
-      steps: state.steps,
-      currentIndex: newIndex,
-    };
-    // Обновляем location.state без navigate, чтобы не плодить history
-    window.history.replaceState(newState, "");
-    setIsTest(target.isTest);
-    setHtmlContent("");
-    setTestData(emptyTest());
-    loadContent(newState);
-  };
-
-  const canPrev = state && state.currentIndex > 0;
-  const canNext = state && state.currentIndex < state.steps.length - 1;
-
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
-    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
-    const filePath = `${state.submodulePath}/${stepId}.txt`;
-    const contentToSave = isTest ? JSON.stringify(testData, null, 2) : htmlContent;
+    const filePath = `${state.submodulePath}/${state.stepId}.txt`;
+    const contentToSave = isTest
+      ? JSON.stringify(testData, null, 2)
+      : htmlContent;
     try {
       if (fileSha) {
-        await updateFile({ path: filePath, content: contentToSave, message: `Update step ${stepId} via admin panel`, sha: fileSha });
+        await updateFile({
+          path: filePath,
+          content: contentToSave,
+          message: `Update step ${state.stepId} via admin panel`,
+          sha: fileSha,
+        });
       } else {
-        await createFile({ path: filePath, content: contentToSave, message: `Create step ${stepId} via admin panel`, image: false, is_test: isTest });
+        await createFile({
+          path: filePath,
+          content: contentToSave,
+          message: `Create step ${state.stepId} via admin panel`,
+          image: false,
+          is_test: isTest,
+        });
       }
       toast.success("Шаг сохранён");
       setDirty(false);
-      const currentState = window.history.state as StepEditorState;
-      await loadContent(currentState ?? state);
+      await loadContent();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка сохранения");
     } finally {
@@ -198,10 +208,9 @@ export default function StepEditorPage() {
   const handleToggleConfirm = async () => {
     if (!state) return;
     setToggling(true);
-    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
     const newIsTest = !isTest;
     try {
-      await editStep(stepId, newIsTest);
+      await editStep(state.stepId, newIsTest);
       setIsTest(newIsTest);
       if (newIsTest) {
         const empty = emptyTest();
@@ -225,11 +234,18 @@ export default function StepEditorPage() {
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
-    const stepId = state.steps[state.currentIndex]?.id ?? state.stepId;
     try {
-      await deleteFile({ stepId, path: `${state.submodulePath}/${stepId}`, message: `Delete step ${stepId} via admin panel`, sha: fileSha });
+      await deleteFile({
+        stepId: state.stepId,
+        path: `${state.submodulePath}/${state.stepId}`,
+        message: `Delete step ${state.stepId} via admin panel`,
+        sha: fileSha,
+      });
       toast.success("Шаг удалён");
-      navigate("/", { replace: true, state: { returnPath: state.submodulePath } as HomeReturnState });
+      navigate("/", {
+        replace: true,
+        state: { returnPath: state.submodulePath } as HomeReturnState,
+      });
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка удаления");
       setDeleting(false);
@@ -239,52 +255,44 @@ export default function StepEditorPage() {
 
   if (!state) return null;
 
-  const currentStepNumber = state.steps[state.currentIndex]?.number ?? state.stepNumber;
-
   return (
     <div className="flex flex-col h-full">
       <ToastContainer toasts={toast.toasts} />
-      <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageFileChange} />
+
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
 
       {/* Top bar */}
       <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
-
-        {/* Назад */}
-        <button onClick={goBack} className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition" title="Назад">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+        <button
+          onClick={goBack}
+          className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition"
+          title="Назад"
+        >
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
 
-        {/* Навигация по шагам */}
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => canPrev && navigateToStep(state.currentIndex - 1)}
-            disabled={!canPrev || loading}
-            className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Предыдущий шаг"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <span className="text-xs text-text-muted tabular-nums">
-            {state.currentIndex + 1} / {state.steps.length}
-          </span>
-          <button
-            onClick={() => canNext && navigateToStep(state.currentIndex + 1)}
-            disabled={!canNext || loading}
-            className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Следующий шаг"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-semibold text-text-heading truncate">Шаг {currentStepNumber}</h1>
+          <h1 className="text-base font-semibold text-text-heading truncate">
+            Шаг {state.stepNumber}
+          </h1>
           <p className="text-xs text-text-muted">{state.submodulePath}</p>
         </div>
 
@@ -301,46 +309,67 @@ export default function StepEditorPage() {
         >
           {isTest ? (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
               </svg>
               Тест
             </>
           ) : (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
               Теория
             </>
           )}
         </button>
 
-        {/* HTML превью — только для теории */}
-        {!isTest && (
-          <button
-            onClick={() => setShowHtml((v) => !v)}
-            disabled={loading}
-            className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition disabled:opacity-50 ${
-              showHtml
-                ? "bg-gray-800 text-white border-gray-800"
-                : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
-            }`}
-            title="Просмотр HTML-кода"
-          >
-            &lt;/&gt;
-          </button>
-        )}
-
         {dirty && (
-          <span className="text-xs text-orange-500 font-medium">Несохранённые изменения</span>
+          <span className="text-xs text-orange-500 font-medium">
+            Несохранённые изменения
+          </span>
         )}
 
         {imageUploading && (
           <span className="text-xs text-blue-500 font-medium flex items-center gap-1">
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-3.5 h-3.5 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
             Загрузка...
           </span>
@@ -352,8 +381,18 @@ export default function StepEditorPage() {
           className="p-1.5 text-text-muted hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
           title="Удалить шаг"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
           </svg>
         </button>
 
@@ -363,13 +402,38 @@ export default function StepEditorPage() {
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
         >
           {saving ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-4 h-4 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           )}
           {saving ? "Сохранение..." : "Сохранить"}
@@ -380,25 +444,29 @@ export default function StepEditorPage() {
       <div className="flex-1 overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-64 text-text-muted">
-            <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-5 h-5 animate-spin mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
             Загрузка содержимого...
           </div>
         ) : isTest ? (
           <TestEditor data={testData} onChange={handleTestChange} />
-        ) : showHtml ? (
-          // ── HTML превью ──
-          <div className="relative">
-            <pre className="bg-gray-900 text-green-400 text-xs font-mono p-4 rounded-lg overflow-x-auto whitespace-pre-wrap break-all min-h-[300px]">{htmlContent}</pre>
-            <button
-              onClick={() => { navigator.clipboard.writeText(htmlContent); toast.success("Скопировано"); }}
-              className="absolute top-3 right-3 text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded transition"
-            >
-              Скопировать
-            </button>
-          </div>
         ) : (
           <TiptapEditor
             ref={editorRef}
@@ -416,9 +484,10 @@ export default function StepEditorPage() {
         onCancel={() => setShowToggleConfirm(false)}
         loading={toggling}
       />
+
       <ConfirmDialog
         open={showDeleteConfirm}
-        message={`Удалить «Шаг ${currentStepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
+        message={`Удалить «Шаг ${state.stepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
         onConfirm={handleDeleteStep}
         onCancel={() => setShowDeleteConfirm(false)}
         loading={deleting}
