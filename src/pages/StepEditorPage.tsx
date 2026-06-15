@@ -12,7 +12,6 @@ import {
   editStep,
   createFile,
   deleteFile,
-  createImage,
 } from "../api/mutations";
 
 export interface StepEditorState {
@@ -59,8 +58,6 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Базовые значения — устанавливаются после того, как TipTap
-  // прочитал и нормализовал HTML (через setTimeout + editorRef.getHTML)
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
 
@@ -73,10 +70,6 @@ export default function StepEditorPage() {
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
 
   const editorRef = useRef<TiptapEditorRef>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const [imageUploading, setImageUploading] = useState(false);
-
-  const handleInsertImageRequest = () => imageInputRef.current?.click();
 
   const goBack = useCallback(() => {
     if (dirty) {
@@ -107,46 +100,10 @@ export default function StepEditorPage() {
     nav?.();
   };
 
-  const handleImageFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file || !state) return;
-      if (!file.type.startsWith("image/")) {
-        toast.error("Только изображения");
-        return;
-      }
-      setImageUploading(true);
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = (ev.target?.result as string).split(",")[1];
-        const imagePath = `${state.submodulePath}/images/${file.name}`;
-        const rawUrl = `https://raw.githubusercontent.com/YaNokavi/CunaEduFile/refs/heads/main/courses/${imagePath}`;
-        try {
-          await createImage({
-            path: imagePath,
-            content: base64,
-            message: `Upload image ${file.name} via admin panel`,
-          });
-          editorRef.current?.insertImage(rawUrl);
-          setDirty(true);
-          toast.success("Изображение вставлено");
-        } catch (err: unknown) {
-          toast.error((err as Error).message ?? "Ошибка загрузки изображения");
-        } finally {
-          setImageUploading(false);
-          if (imageInputRef.current) imageInputRef.current.value = "";
-        }
-      };
-      reader.readAsDataURL(file);
-    },
-    [state],
-  ); // eslint-disable-line
-
-  // ── Загрузка при каждом новом navigate() ──────────────────────────────────────
+  // ── Загрузка при каждом новом navigate() ───────────────────────────────────────────
   useEffect(() => {
     if (!state) return;
 
-    // Полный сброс состояния
     setIsTest(state.isTest);
     setHtmlContent("");
     setTestData(emptyTest());
@@ -182,14 +139,8 @@ export default function StepEditorPage() {
         } else {
           const html = typeof res.content.data === "string" ? res.content.data : "";
           setHtmlContent(html);
-
-          // Ждём два тика евентлупа:
-          // 1й — React перерендеривает TiptapEditor с новым content
-          // 2й — useEffect внутри TiptapEditor запускает setContent()
-          // После этого editorRef.getHTML() вернёт нормализованный HTML
           await Promise.resolve();
           await Promise.resolve();
-
           const normalized = editorRef.current?.getHTML() ?? html;
           initialHtml.current = normalized;
           setDirty(false);
@@ -204,7 +155,6 @@ export default function StepEditorPage() {
     run();
   }, [location.key]); // eslint-disable-line
 
-  // Перезагрузка после сохранения — обновляет SHA без сброса редактора
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
@@ -256,7 +206,7 @@ export default function StepEditorPage() {
     setDirty(JSON.stringify(d) !== initialTestData.current);
   };
 
-  // ── Save ───────────────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
@@ -291,7 +241,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ───────────────────────────────────────────────────
+  // ── Toggle test/theory ────────────────────────────────────────────────
   const handleToggleConfirm = async () => {
     if (!state) return;
     setToggling(true);
@@ -317,7 +267,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ────────────────────────────────────────────────────────────
+  // ── Delete step ──────────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
@@ -345,14 +295,6 @@ export default function StepEditorPage() {
   return (
     <div className="flex flex-col h-full">
       <ToastContainer toasts={toast.toasts} />
-
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleImageFileChange}
-      />
 
       {/* Top bar */}
       <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
@@ -408,16 +350,6 @@ export default function StepEditorPage() {
           </span>
         )}
 
-        {imageUploading && (
-          <span className="text-xs text-blue-500 font-medium flex items-center gap-1">
-            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            Загрузка...
-          </span>
-        )}
-
         <button
           onClick={() => setShowDeleteConfirm(true)}
           disabled={loading || deleting}
@@ -466,7 +398,6 @@ export default function StepEditorPage() {
             ref={editorRef}
             content={htmlContent}
             onChange={handleHtmlChange}
-            onInsertImageRequest={handleInsertImageRequest}
           />
         )}
       </div>
