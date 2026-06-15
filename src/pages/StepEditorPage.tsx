@@ -44,7 +44,6 @@ export default function StepEditorPage() {
     if (!state) navigate("/", { replace: true });
   }, []); // eslint-disable-line
 
-  // Путь назад, куда нужно вернуться после подтверждения выхода
   const pendingNavRef = useRef<(() => void) | null>(null);
 
   const navigateBack = useCallback(() => {
@@ -60,7 +59,6 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Оригинальные значения — берутся из нормализованного HTML редактора (через onReady)
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
   const pendingInitRef = useRef(false);
@@ -71,7 +69,6 @@ export default function StepEditorPage() {
   const [showToggleConfirm, setShowToggleConfirm] = useState(false);
   const [toggling, setToggling] = useState(false);
 
-  // Модалка несохранённых изменений при выходе
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
 
   const editorRef = useRef<TiptapEditorRef>(null);
@@ -80,8 +77,6 @@ export default function StepEditorPage() {
 
   const handleInsertImageRequest = () => imageInputRef.current?.click();
 
-  // Попытка навигации назад: если есть dirty — показываем модалку,
-  // иначе сразу уходим
   const goBack = useCallback(() => {
     if (dirty) {
       pendingNavRef.current = navigateBack;
@@ -91,13 +86,11 @@ export default function StepEditorPage() {
     }
   }, [dirty, navigateBack]);
 
-  // Остаться на странице
   const handleStay = () => {
     pendingNavRef.current = null;
     setShowUnsavedDialog(false);
   };
 
-  // Отменить изменения и выйти
   const handleDiscard = () => {
     setShowUnsavedDialog(false);
     const nav = pendingNavRef.current;
@@ -105,7 +98,6 @@ export default function StepEditorPage() {
     nav?.();
   };
 
-  // Сохранить и выйти
   const handleSaveAndLeave = async () => {
     await handleSave();
     const nav = pendingNavRef.current;
@@ -149,7 +141,62 @@ export default function StepEditorPage() {
     [state],
   ); // eslint-disable-line
 
-  // ── Load content ───────────────────────────────────────────────────────────────
+  // ── Load content ─────────────────────────────────────────────────────────────
+  // 】 location.key — уникален при каждом navigate(), даже на тот же маршрут.
+  // Поэтому используем его как зависимость — перезагрузка срабатывает при каждом
+  // повторном открытии шага, даже если компонент не был размонтирован.
+  useEffect(() => {
+    if (!state) return;
+
+    // Сбрасываем все состояния перед загрузкой
+    setIsTest(state.isTest);
+    setHtmlContent("");
+    setTestData(emptyTest());
+    setFileSha("");
+    setDirty(false);
+    setLoading(true);
+    initialHtml.current = "";
+    initialTestData.current = "";
+    pendingInitRef.current = false;
+
+    const run = async () => {
+      try {
+        const fileContentPath = `${state.submodulePath}/${state.stepId}.txt`;
+        const res = await fetchFileContent(
+          state.contentUrl,
+          fileContentPath,
+          state.isTest,
+        );
+        setFileSha(res.sha ?? "");
+        if (state.isTest) {
+          const raw = res.content.data;
+          let parsed: TestData = emptyTest();
+          if (typeof raw === "string") {
+            try {
+              const p = JSON.parse(raw);
+              if (p && "question" in p) parsed = p as TestData;
+            } catch { /* ignore */ }
+          } else if (raw && typeof raw === "object" && "question" in raw) {
+            parsed = raw as TestData;
+          }
+          setTestData(parsed);
+          initialTestData.current = JSON.stringify(parsed);
+        } else {
+          const html = typeof res.content.data === "string" ? res.content.data : "";
+          pendingInitRef.current = true;
+          setHtmlContent(html);
+        }
+      } catch (e: unknown) {
+        toast.error((e as Error).message ?? "Не удалось загрузить шаг");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+  }, [location.key]); // eslint-disable-line
+
+  // ── loadContent — используется только после сохранения для обновления SHA
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
@@ -169,17 +216,14 @@ export default function StepEditorPage() {
           try {
             const p = JSON.parse(raw);
             if (p && "question" in p) parsed = p as TestData;
-          } catch {
-            /* ignore */
-          }
+          } catch { /* ignore */ }
         } else if (raw && typeof raw === "object" && "question" in raw) {
           parsed = raw as TestData;
         }
         setTestData(parsed);
         initialTestData.current = JSON.stringify(parsed);
       } else {
-        const html =
-          typeof res.content.data === "string" ? res.content.data : "";
+        const html = typeof res.content.data === "string" ? res.content.data : "";
         pendingInitRef.current = true;
         setHtmlContent(html);
       }
@@ -188,11 +232,7 @@ export default function StepEditorPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // eslint-disable-line
-
-  useEffect(() => {
-    loadContent();
-  }, [loadContent]);
+  }, [state]); // eslint-disable-line
 
   const handleEditorReady = useCallback((normalizedHtml: string) => {
     if (pendingInitRef.current) {
@@ -431,7 +471,6 @@ export default function StepEditorPage() {
         )}
       </div>
 
-      {/* Модалка переключения типа */}
       <ConfirmDialog
         open={showToggleConfirm}
         message={`Сменить тип шага с «${isTest ? "Тест" : "Теория"}» на «${isTest ? "Теория" : "Тест"}»? Текущее содержимое будет очищено.`}
@@ -440,7 +479,6 @@ export default function StepEditorPage() {
         loading={toggling}
       />
 
-      {/* Модалка удаления шага */}
       <ConfirmDialog
         open={showDeleteConfirm}
         message={`Удалить «Шаг ${state.stepNumber}»? Файл будет удалён с GitHub и запись из БД. Это действие необратимо.`}
@@ -449,7 +487,6 @@ export default function StepEditorPage() {
         loading={deleting}
       />
 
-      {/* Модалка несохранённых изменений */}
       <UnsavedChangesDialog
         open={showUnsavedDialog}
         saving={saving}
