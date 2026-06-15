@@ -65,13 +65,17 @@ courses/{courseId}/{moduleId}/{submoduleId}/images/{filename}
 
 ## БД — таблицы PostgreSQL
 
+> ⚠️ Реальные имена таблиц отличаются от того, что используется внутри `processQuery` в `server.js`. Всегда используй имена ниже в новых запросах.
+
 | Таблица | Ключевые поля |
 |---|---|
 | `course` | `id`, `name`, `author`, `description`, `rating`, `iconurl` |
-| `coursemodule` | `id`, `name`, `courseid` |
+| `course_module` | `id`, `name`, `courseid` |
 | `submodule` | `id`, `name`, `moduleid` |
-| `submodulestep` | `id`, `submoduleid`, `courseid`, `contenturl`, `istest` |
+| `submodule_step` | `id`, `submoduleid`, `courseid`, `contenturl`, `istest` |
 | `migration.migration` | `id`, `courseid`, `moduleid`, `submoduleid`, `stepid`, `sql`, `action`, `version`, `islast` |
+
+**FK-ограничение:** `submodule_step.courseid` → `course.id` (с именем `fk_submodule_step_course_id`). При удалении курса нужно сначала удалить записи из `submodule_step`.
 
 ---
 
@@ -114,10 +118,10 @@ src/
 │   │                      # Types: Course, CourseModule, Submodule, Step, FileContent, ImageFile
 │   └── mutations.ts       # updateFile, createFile, createImage, deleteFile, deleteImage,
 │                          # editStep, createDirectory, createCourse, editCourse, renameItem,
-│                          # generateMigration
+│                          # deleteDirectory, generateMigration
 ├── components/
 │   ├── FileItem.tsx        # Элемент списка (course/module/submodule/step) с кнопками действий
-│   ├── TiptapEditor.tsx    # Rich-text редактор (TipTap) — вход/выход HTML
+│   ├── TiptapEditor.tsx    # Rich-text редактор (TipTap) — forwardRef, ref.insertImage(url)
 │   ├── TestEditor.tsx      # Редактор тестов — вопросы + варианты + правильный ответ
 │   ├── Modal.tsx           # Универсальная модалка с footer
 │   ├── ConfirmDialog.tsx   # Диалог подтверждения удаления
@@ -130,7 +134,8 @@ src/
 ├── pages/
 │   ├── LoginPage.tsx       # Форма входа → AuthContext.login()
 │   ├── HomePage.tsx        # Главная: навигация по иерархии, модалки CRUD, drag&drop изображений
-│   ├── StepEditorPage.tsx  # Редактор шага: TiptapEditor или TestEditor, сохранение, смена типа
+│   ├── StepEditorPage.tsx  # Редактор шага: TiptapEditor или TestEditor, сохранение, смена типа,
+│   │                       # загрузка и вставка изображений через кнопку 🖼 в тулбаре
 │   ├── FAQPage.tsx         # Статичный аккордеон FAQ
 │   ├── ContactsPage.tsx    # Форма контактов (статика)
 │   └── NotFoundPage.tsx    # 404
@@ -193,12 +198,22 @@ interface StepEditorState {
 | POST | `/api/create-image` | Загрузить изображение на GitHub |
 | DELETE | `/api/delete-file` | Удалить шаг (DB + GitHub) |
 | DELETE | `/api/delete-image` | Удалить изображение с GitHub |
+| DELETE | `/api/delete-directory` | Удалить курс/модуль/подмодуль (DB + GitHub рекурсивно) |
 | POST | `/api/edit-step?stepId=&isTest=` | Сменить тип шага |
 | POST | `/api/create-directory` | Создать модуль или подмодуль (DB + GitHub) |
 | POST | `/api/create-course` | Создать курс (DB + GitHub) |
 | POST | `/api/edit-course` | Редактировать метаданные курса |
 | PUT | `/api/rename` | Переименовать курс/модуль/подмодуль |
 | GET | `/api/generate-migration` | Скачать `.sql` миграцию (Liquibase-формат) |
+
+### DELETE /api/delete-directory
+
+Тело запроса: `{ id: number, type: "course" | "module" | "submodule", path: string, message: string }`
+
+- `path` — путь без префикса `courses/`, например `"1"`, `"1/2"`, `"1/2/3"`
+- Использует `originalPool` напрямую (минуя обёртку `pool`), чтобы не триггерить `processQuery`
+- Порядок удаления: сначала `submodule_step`, затем `submodule`, затем `course_module`/`course`, потом GitHub
+- GitHub-папка удаляется рекурсивно через вспомогательную функцию `deleteGithubFolder(path, message)`
 
 ---
 
@@ -218,9 +233,13 @@ interface StepEditorState {
 
 **`pool`** — обёртка над `pg.Pool`, перехватывает каждый SQL-запрос и вызывает `processQuery()` для записи в таблицу миграций.
 
-**`getFileSha(path)`** — получает SHA файла через `GET https://api.github.com/repos/YaNokavi/CunaEduFile/contents/courses/{path}`. Используется при `/api/file-content` для возврата SHA (нужен при последующем `updateFile`).
+**`originalPool`** — чистый `pg.Pool` без обёртки. Используется в `delete-directory` чтобы не триггерить `processQuery` (которая не умеет обрабатывать DELETE для `course_module`/`submodule`/`course`).
 
-**`processQuery(queryText, queryParams, queryResult)`** — анализирует каждый INSERT/DELETE SQL-запрос и пишет запись в `migration.migration`. Это основа генерации миграций.
+**`getFileSha(path)`** — получает SHA файла через `GET https://api.github.com/repos/YaNokavi/CunaEduFile/contents/courses/{path}`.
+
+**`deleteGithubFolder(folderPath, message)`** — рекурсивно удаляет все файлы в папке через GitHub API. Если папка не существует (404) — молча пропускает.
+
+**`processQuery(queryText, queryParams, queryResult)`** — анализирует каждый INSERT/DELETE SQL-запрос и пишет запись в `migration.migration`. Умеет обрабатывать только: INSERT/DELETE для `submodule_step`, INSERT для `submodule`/`course_module`/`course`.
 
 **In-memory кэш `cache`** — кэширует ответы `/api/courses`, инвалидируется при создании/удалении/переименовании.
 
@@ -229,6 +248,7 @@ interface StepEditorState {
 - 🚨 `GITHUB_TOKEN`, логин/пароль и session secret хардкожены как fallback (есть и `.env` ветка, и хардкод ветка подряд)
 - ⚠️ `authenticateAdmin` middleware объявлен, но **не применяется** ни к одному роуту
 - ⚠️ `connectToDb()` вызывает сам себя в catch без задержки (потенциальный stack overflow)
+- ⚠️ Внутри `processQuery` имена таблиц написаны как `coursemodule`/`submodulestep` — это артефакт старого кода, реальные имена таблиц `course_module`/`submodule_step`
 
 ---
 
@@ -251,6 +271,25 @@ JSON-файл следующей структуры:
 }
 ```
 `correctAnswer` — индекс правильного ответа в массиве `answers`.
+
+---
+
+## Нюансы путей для API
+
+### delete-file vs остальные
+
+Бэкенд в `/api/delete-file` **сам дописывает `.txt`** к пути:
+```js
+let gitUrl = `https://api.github.com/.../courses/${path}.txt`
+```
+Поэтому с фронта нужно передавать путь **без `.txt`**:
+```ts
+// Правильно:
+path: `${submodulePath}/${stepId}`        // → "1/2/3/42" → бэкенд делает "1/2/3/42.txt"
+
+// Для fetchFileContent, updateFile, createFile — с .txt:
+path: `${submodulePath}/${stepId}.txt`
+```
 
 ---
 
@@ -285,22 +324,24 @@ PASSWORD=...
 - Создание курса, модуля, подмодуля
 - Редактирование метаданных курса
 - Переименование курса/модуля/подмодуля
-- Drag & drop загрузка изображений
+- **Удаление курса/модуля/подмодуля** — рекурсивно (DB + GitHub), с предупреждением о количестве вложенных шагов
+- Drag & drop загрузка изображений (на HomePage)
 - Генерация SQL-миграции (скачивание `.sql`)
 - **Редактор шагов** (открывается при клике на шаг):
   - Rich-text редактор (TipTap) для теории
   - JSON-редактор тестов (вопросы + варианты + правильный ответ)
   - Переключение типа шага (Теория ↔ Тест) через API
   - Сохранение на GitHub (updateFile / createFile)
+  - Удаление шага (DB + GitHub)
   - Индикатор несохранённых изменений
+  - **Вставка изображения в редактор** — кнопка 🖼 в тулбаре, загружает в `submodulePath/images/`, вставляет по raw URL
 
 ### ❌ Не реализовано
 
-- Создание нового шага из UI (кнопка в подмодуле)
-- Удаление шага через UI
+- Переупорядочивание шагов (кнопки ↑↓ или drag-n-drop)
+- Переименование шага
+- Preview шага (предпросмотр HTML)
 - Удаление изображения через UI
-- Панель изображений в редакторе шагов (вставка изображения в TipTap)
-- Удаление курса/модуля/подмодуля
 
 ---
 
