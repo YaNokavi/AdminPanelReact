@@ -6,7 +6,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import FileItem, { type NavItem, type ItemKind } from "../components/FileItem";
 import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -25,7 +25,7 @@ import {
   deleteFile,
   deleteDirectory,
 } from "../api/mutations";
-import type { StepEditorState } from "./StepEditorPage";
+import type { StepEditorState, HomeReturnState } from "./StepEditorPage";
 
 export interface BreadcrumbItem {
   label: string;
@@ -114,60 +114,24 @@ function countSteps(item: NavItem): number {
 // ── field component ───────────────────────────────────────────────────────────
 
 function Field({
-  label,
-  id,
-  value,
-  onChange,
-  type = "text",
-  placeholder,
-  required,
-  min,
-  max,
-  textarea,
+  label, id, value, onChange, type = "text", placeholder, required, min, max, textarea,
 }: {
-  label: string;
-  id: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  min?: number;
-  max?: number;
-  textarea?: boolean;
+  label: string; id: string; value: string; onChange: (v: string) => void;
+  type?: string; placeholder?: string; required?: boolean;
+  min?: number; max?: number; textarea?: boolean;
 }) {
-  const cls =
-    "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
+  const cls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
   return (
     <div>
-      <label
-        htmlFor={id}
-        className="block text-sm font-medium text-text-heading mb-1"
-      >
+      <label htmlFor={id} className="block text-sm font-medium text-text-heading mb-1">
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {textarea ? (
-        <textarea
-          id={id}
-          className={cls}
-          rows={3}
-          value={value}
-          placeholder={placeholder}
-          required={required}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <textarea id={id} className={cls} rows={3} value={value} placeholder={placeholder}
+          required={required} onChange={(e) => onChange(e.target.value)} />
       ) : (
-        <input
-          id={id}
-          type={type}
-          className={cls}
-          value={value}
-          placeholder={placeholder}
-          required={required}
-          min={min}
-          max={max}
-          onChange={(e) => onChange(e.target.value)}
-        />
+        <input id={id} type={type} className={cls} value={value} placeholder={placeholder}
+          required={required} min={min} max={max} onChange={(e) => onChange(e.target.value)} />
       )}
     </div>
   );
@@ -178,6 +142,7 @@ function Field({
 export default function HomePage() {
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [allCourses, setAllCourses] = useState<NavItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,9 +168,86 @@ export default function HomePage() {
     }
   }, []); // eslint-disable-line
 
+  // ── restore breadcrumbs from returnPath (after back from StepEditorPage) ───
   useEffect(() => {
-    loadCourses();
-  }, [loadCourses]);
+    const returnState = location.state as HomeReturnState | null;
+    const returnPath = returnState?.returnPath;
+    if (!returnPath) {
+      loadCourses();
+      return;
+    }
+
+    // returnPath = "courseId/moduleId/submoduleId"
+    const segments = returnPath.split("/").filter(Boolean);
+    // [courseId, moduleId, submoduleId]
+
+    const restoreAndLoad = async () => {
+      setLoading(true);
+      try {
+        const data = await fetchCourses();
+        const courses = data.map(courseToNavItem);
+        setAllCourses(courses);
+
+        const newCrumbs: BreadcrumbItem[] = [
+          { label: "Главная", items: [], kind: "course", path: "" },
+        ];
+
+        if (segments.length >= 1) {
+          // Уровень курса
+          const courseId = segments[0];
+          const course = courses.find((c) => String(c.id) === courseId);
+          if (course) {
+            newCrumbs.push({
+              label: course.name,
+              items: course.modules ?? [],
+              kind: "module",
+              path: courseId,
+            });
+          }
+        }
+
+        if (segments.length >= 2 && newCrumbs.length === 2) {
+          // Уровень модуля
+          const moduleId = segments[1];
+          const modules = newCrumbs[1].items;
+          const mod = modules.find((m) => String(m.id) === moduleId);
+          if (mod) {
+            newCrumbs.push({
+              label: mod.name,
+              items: mod.submodules ?? [],
+              kind: "submodule",
+              path: moduleId,
+            });
+          }
+        }
+
+        if (segments.length >= 3 && newCrumbs.length === 3) {
+          // Уровень сабмодуля — показываем шаги
+          const submoduleId = segments[2];
+          const submodules = newCrumbs[2].items;
+          const sub = submodules.find((s) => String(s.id) === submoduleId);
+          if (sub) {
+            newCrumbs.push({
+              label: sub.name,
+              items: sub.steps ?? [],
+              kind: "step",
+              path: submoduleId,
+            });
+          }
+        }
+
+        setBreadcrumbs(newCrumbs);
+        // Сбрасываем state чтобы при F5 не восстанавливалось ещё раз
+        window.history.replaceState({}, "");
+      } catch {
+        toast.error("Не удалось загрузить курсы");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    restoreAndLoad();
+  }, []); // eslint-disable-line
 
   // ── navigation ───────────────────────────────────────────────────────────
   const navigateTo = (item: NavItem) => {
@@ -224,12 +266,7 @@ export default function HomePage() {
     const childKind = getChildKind(item);
     setBreadcrumbs((prev) => [
       ...prev,
-      {
-        label: item.name,
-        items: children,
-        kind: childKind,
-        path: String(item.id),
-      },
+      { label: item.name, items: children, kind: childKind, path: String(item.id) },
     ]);
   };
 
@@ -267,11 +304,7 @@ export default function HomePage() {
 
         let sha = "";
         try {
-          const res = await fetchFileContent(
-            contentUrl,
-            fileContentPath,
-            confirmItem.isTest ?? false,
-          );
+          const res = await fetchFileContent(contentUrl, fileContentPath, confirmItem.isTest ?? false);
           sha = res.sha ?? "";
         } catch { /* файла нет на GitHub — ок */ }
 
@@ -293,14 +326,8 @@ export default function HomePage() {
         loadCourses();
       } else {
         const currentPath = buildPath(breadcrumbs);
-        const itemPath = currentPath
-          ? `${currentPath}/${confirmItem.id}`
-          : String(confirmItem.id);
-        const typeMap = {
-          course: "course",
-          module: "module",
-          submodule: "submodule",
-        } as const;
+        const itemPath = currentPath ? `${currentPath}/${confirmItem.id}` : String(confirmItem.id);
+        const typeMap = { course: "course", module: "module", submodule: "submodule" } as const;
 
         await deleteDirectory({
           id: confirmItem.id as number,
@@ -314,8 +341,7 @@ export default function HomePage() {
           confirmItem.kind === "module" ? "Модуль" : "Подмодуль";
         toast.success(`${kindRu} удалён`);
 
-        const itemIsCurrentLevel =
-          breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
+        const itemIsCurrentLevel = breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
         if (itemIsCurrentLevel) {
           setBreadcrumbs((prev) => prev.slice(0, -1));
         } else {
@@ -348,8 +374,7 @@ export default function HomePage() {
 
   const handleCreateCourse = async () => {
     if (!ccName.trim() || !ccAuthor.trim() || !ccDesc.trim()) {
-      toast.error("Заполните обязательные поля");
-      return;
+      toast.error("Заполните обязательные поля"); return;
     }
     setCcLoading(true);
     try {
@@ -380,8 +405,7 @@ export default function HomePage() {
   const handleEditCourse = async () => {
     if (!editTarget) return;
     if (!ecName.trim() || !ecAuthor.trim() || !ecDesc.trim()) {
-      toast.error("Заполните обязательные поля");
-      return;
+      toast.error("Заполните обязательные поля"); return;
     }
     setEcLoading(true);
     try {
@@ -398,69 +422,36 @@ export default function HomePage() {
   const [showCreateDir, setShowCreateDir] = useState(false);
   const [cdName, setCdName] = useState("");
   const [cdLoading, setCdLoading] = useState(false);
-  const dirKind: "module" | "submodule" =
-    currentLevel === "module" ? "module" : "submodule";
+  const dirKind: "module" | "submodule" = currentLevel === "module" ? "module" : "submodule";
 
   const handleCreateDir = async () => {
     if (!cdName.trim()) { toast.error("Введите имя"); return; }
     setCdLoading(true);
     const path = buildPath(breadcrumbs);
     try {
-      await createDirectory({
-        path: `${path}/${cdName}`,
-        type: dirKind,
-        message: `Create ${dirKind} via admin panel`,
-      });
+      await createDirectory({ path: `${path}/${cdName}`, type: dirKind, message: `Create ${dirKind} via admin panel` });
 
-      // Сразу обновляем текущий уровень breadcrumbs
       if (dirKind === "module") {
         const modules = await fetchModules(path);
         const moduleItems: NavItem[] = modules.map((m) => ({
-          id: m.id,
-          name: m.name,
-          kind: "module",
+          id: m.id, name: m.name, kind: "module",
           submodules: m.submodules?.map((s) => ({
-            id: s.id,
-            name: s.name,
-            kind: "submodule" as ItemKind,
-            steps: s.steps?.map((st) => ({
-              id: st.id,
-              name: `Шаг ${st.number}`,
-              kind: "step" as ItemKind,
-              isTest: st.is_test,
-              number: st.number,
-              contentUrl: st.content_url,
-            })) ?? [],
+            id: s.id, name: s.name, kind: "submodule" as ItemKind,
+            steps: s.steps?.map((st) => ({ id: st.id, name: `Шаг ${st.number}`, kind: "step" as ItemKind, isTest: st.is_test, number: st.number, contentUrl: st.content_url })) ?? [],
           })) ?? [],
         }));
-        setBreadcrumbs((prev) => {
-          const last = prev[prev.length - 1];
-          return [...prev.slice(0, -1), { ...last, items: moduleItems }];
-        });
+        setBreadcrumbs((prev) => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { ...last, items: moduleItems }]; });
       } else {
         const submodules = await fetchSubmodules(path);
         const submoduleItems: NavItem[] = submodules.map((s) => ({
-          id: s.id,
-          name: s.name,
-          kind: "submodule",
-          steps: s.steps?.map((st) => ({
-            id: st.id,
-            name: `Шаг ${st.number}`,
-            kind: "step" as ItemKind,
-            isTest: st.is_test,
-            number: st.number,
-            contentUrl: st.content_url,
-          })) ?? [],
+          id: s.id, name: s.name, kind: "submodule",
+          steps: s.steps?.map((st) => ({ id: st.id, name: `Шаг ${st.number}`, kind: "step" as ItemKind, isTest: st.is_test, number: st.number, contentUrl: st.content_url })) ?? [],
         }));
-        setBreadcrumbs((prev) => {
-          const last = prev[prev.length - 1];
-          return [...prev.slice(0, -1), { ...last, items: submoduleItems }];
-        });
+        setBreadcrumbs((prev) => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { ...last, items: submoduleItems }]; });
       }
 
       toast.success(`${dirKind === "module" ? "Модуль" : "Подмодуль"} создан`);
-      setShowCreateDir(false);
-      setCdName("");
+      setShowCreateDir(false); setCdName("");
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания");
@@ -479,31 +470,17 @@ export default function HomePage() {
       ? JSON.stringify({ question: "", options: ["", "", "", ""], answer: [] }, null, 2)
       : "<p></p>";
     try {
-      await createFile({
-        path: submodulePath,
-        content: defaultContent,
-        message: "Create step via admin panel",
-        image: false,
-        is_test: csIsTest,
-      });
+      await createFile({ path: submodulePath, content: defaultContent, message: "Create step via admin panel", image: false, is_test: csIsTest });
 
       const steps = await fetchSteps(submodulePath);
       const stepItems: NavItem[] = steps.map((st) => ({
-        id: st.id,
-        name: `Шаг ${st.number}`,
-        kind: "step",
-        isTest: st.is_test,
-        number: st.number,
-        contentUrl: st.content_url,
+        id: st.id, name: `Шаг ${st.number}`, kind: "step",
+        isTest: st.is_test, number: st.number, contentUrl: st.content_url,
       }));
-      setBreadcrumbs((prev) => {
-        const last = prev[prev.length - 1];
-        return [...prev.slice(0, -1), { ...last, items: stepItems }];
-      });
+      setBreadcrumbs((prev) => { const last = prev[prev.length - 1]; return [...prev.slice(0, -1), { ...last, items: stepItems }]; });
 
       toast.success(`Шаг создан (${csIsTest ? "Тест" : "Теория"})`);
-      setShowCreateStep(false);
-      setCsIsTest(false);
+      setShowCreateStep(false); setCsIsTest(false);
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания шага");
@@ -523,9 +500,7 @@ export default function HomePage() {
     }
     setRnLoading(true);
     const path = `${buildPath(breadcrumbs)}/${renameTarget.id}`;
-    const fileTypeName =
-      renameTarget.kind === "course" ? "course" :
-      renameTarget.kind === "module" ? "module" : "submodule";
+    const fileTypeName = renameTarget.kind === "course" ? "course" : renameTarget.kind === "module" ? "module" : "submodule";
     try {
       await renameItem({ path, fileTypeName, newName: rnName });
       toast.success("Переименовано");
