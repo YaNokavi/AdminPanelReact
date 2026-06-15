@@ -4,7 +4,7 @@ import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useCallback, useImperativeHandle, forwardRef, useRef } from "react";
 
 export interface TiptapEditorRef {
   insertImage: (url: string) => void;
@@ -14,6 +14,8 @@ interface Props {
   content: string;
   onChange: (html: string) => void;
   onInsertImageRequest?: () => void;
+  /** Вызывается один раз после того, как редактор смонтировался и нормализовал HTML */
+  onReady?: (normalizedHtml: string) => void;
 }
 
 const btnCls = (active: boolean) =>
@@ -24,9 +26,11 @@ const btnCls = (active: boolean) =>
   }`;
 
 const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
-  { content, onChange, onInsertImageRequest },
+  { content, onChange, onInsertImageRequest, onReady },
   ref
 ) {
+  const readyFired = useRef(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -36,6 +40,13 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
       Placeholder.configure({ placeholder: "Начните вводить содержимое шага..." }),
     ],
     content,
+    onCreate({ editor }) {
+      // Первый вызов: редактор уже распарсил и нормализовал HTML
+      if (!readyFired.current) {
+        readyFired.current = true;
+        onReady?.(editor.getHTML());
+      }
+    },
     onUpdate({ editor }) {
       onChange(editor.getHTML());
     },
@@ -50,6 +61,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content, false);
+      // При принудительной замене контента (например, перезагрузка после сохранения)
+      // сбрасываем флаг, чтобы onReady мог сработать снова через onCreate не нужно —
+      // просто сообщаем родителю нормализованный HTML напрямую
+      onReady?.(editor.getHTML());
     }
   }, [content]); // eslint-disable-line
 
@@ -65,7 +80,6 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   if (!editor) return null;
 
   return (
-    // Обёртка с overflow-hidden и min-w-0 — предотвращает растяжку за пределы экрана
     <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col min-w-0">
       {/* Toolbar */}
       <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">

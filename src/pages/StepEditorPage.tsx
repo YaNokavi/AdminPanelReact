@@ -61,9 +61,12 @@ export default function StepEditorPage() {
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Оригинальные значения после загрузки — для сравнения dirty
+  // Оригинальные значения — берутся из нормализованного HTML редактора (через onReady)
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
+
+  // Флаг: контент только что загружен и ждёт onReady от редактора
+  const pendingInitRef = useRef(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -139,13 +142,13 @@ export default function StepEditorPage() {
           parsed = raw as TestData;
         }
         setTestData(parsed);
-        // Сохраняем оригинал для сравнения
         initialTestData.current = JSON.stringify(parsed);
       } else {
         const html =
           typeof res.content.data === "string" ? res.content.data : "";
+        // Выставляем флаг: следующий onReady от TiptapEditor зафиксирует нормализованный HTML
+        pendingInitRef.current = true;
         setHtmlContent(html);
-        initialHtml.current = html;
       }
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось загрузить шаг");
@@ -158,7 +161,19 @@ export default function StepEditorPage() {
     loadContent();
   }, [loadContent]);
 
-  // Обновление dirty через сравнение с оригиналом
+  /**
+   * Вызывается из TiptapEditor после того, как редактор смонтировался
+   * и нормализовал HTML. Используем этот момент как «точку отсчёта» для dirty.
+   */
+  const handleEditorReady = useCallback((normalizedHtml: string) => {
+    if (pendingInitRef.current) {
+      initialHtml.current = normalizedHtml;
+      pendingInitRef.current = false;
+      setDirty(false);
+    }
+  }, []);
+
+  // Обновление dirty через сравнение с нормализованным оригиналом
   const handleTestChange = (d: TestData) => {
     setTestData(d);
     setDirty(JSON.stringify(d) !== initialTestData.current);
@@ -166,7 +181,10 @@ export default function StepEditorPage() {
 
   const handleHtmlChange = (html: string) => {
     setHtmlContent(html);
-    setDirty(html !== initialHtml.current);
+    // Если initialHtml ещё не установлен (pendingInit), не трогаем dirty
+    if (!pendingInitRef.current) {
+      setDirty(html !== initialHtml.current);
+    }
   };
 
   // ── Save ───────────────────────────────────────────────────────────────────
@@ -473,6 +491,7 @@ export default function StepEditorPage() {
             content={htmlContent}
             onChange={handleHtmlChange}
             onInsertImageRequest={handleInsertImageRequest}
+            onReady={handleEditorReady}
           />
         )}
       </div>
