@@ -84,7 +84,6 @@ export async function fetchCourses(path = "", type: FileType = "Курсы"): Pr
   const data = await apiFetch<Course[]>(
     `/api/courses?path=${encodeURIComponent(path)}&type=${encodeURIComponent(type)}`,
   );
-  // Рекурсивно чистим null-шаги на всех уровнях
   return data.map((course) => ({
     ...course,
     modules: course.modules?.map((mod) => ({
@@ -138,8 +137,10 @@ export async function fetchFileContent(
   filePath: string,
   isTest: boolean,
 ): Promise<FileContentResponse> {
+  // Добавляем cache-busting параметр к fileUrl, чтобы обойти GitHub CDN-кэш
+  const cacheBustedUrl = `${fileUrl}${fileUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
   return apiFetch<FileContentResponse>(
-    `/api/file-content?fileUrl=${encodeURIComponent(fileUrl)}&filePath=${encodeURIComponent(filePath)}&fileType=${isTest}`,
+    `/api/file-content?fileUrl=${encodeURIComponent(cacheBustedUrl)}&filePath=${encodeURIComponent(filePath)}&fileType=${isTest}`,
     { noCache: true },
   );
 }

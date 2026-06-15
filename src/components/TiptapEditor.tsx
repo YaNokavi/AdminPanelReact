@@ -65,7 +65,8 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   if (!editor) return null;
 
   return (
-    <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col">
+    // Обёртка с overflow-hidden и min-w-0 — предотвращает растяжку за пределы экрана
+    <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col min-w-0">
       {/* Toolbar */}
       <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">
         <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={btnCls(editor.isActive("bold"))} title="Bold"><b>B</b></button>
@@ -91,10 +92,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
         <button type="button" onClick={() => editor.chain().focus().redo().run()} className={btnCls(false)} title="Повторить">↪</button>
       </div>
 
-      {/* Editor area */}
+      {/* Класс tiptap-editor-content нужен для CSS-стилей из index.css */}
       <EditorContent
         editor={editor}
-        className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none"
+        className="tiptap-editor-content p-4 min-h-[300px] overflow-x-hidden min-w-0"
       />
     </div>
   );
