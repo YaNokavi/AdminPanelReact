@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // Формат файла теста на GitHub:
 // { "question": "...", "options": ["A", "B", "C", "D"], "answer": ["A"] }
@@ -24,7 +24,15 @@ export default function TestEditor({ data, onChange }: Props) {
     data.question !== undefined ? data : emptyTest()
   );
 
+  // Флаг: пропускаем первый вызов onChange при маунте,
+  // чтобы не ставить dirty до реального редактирования
+  const isMounted = useRef(false);
+
   useEffect(() => {
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     onChange(test);
   }, [test]); // eslint-disable-line
 
