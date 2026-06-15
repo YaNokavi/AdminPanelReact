@@ -817,27 +817,6 @@ export default function HomePage() {
               миграции.
             </p>
           </div>
-          {isRoot && (
-            <button
-              onClick={() => setShowCreateCourse(true)}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              Создать курс
-            </button>
-          )}
         </div>
       </section>
 
@@ -943,6 +922,27 @@ export default function HomePage() {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-5">
+          {isRoot && (
+            <button
+              onClick={() => setShowCreateCourse(true)}
+              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              Создать курс
+            </button>
+          )}
           {canCreateDir && (
             <button
               onClick={() => setShowCreateDir(true)}
