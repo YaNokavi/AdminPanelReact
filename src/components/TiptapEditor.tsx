@@ -4,6 +4,7 @@ import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
+import { Extension } from "@tiptap/core";
 import { useEffect, useCallback, useImperativeHandle, forwardRef, useState } from "react";
 
 export interface TiptapEditorRef {
@@ -26,17 +27,29 @@ const btnCls = (active: boolean) =>
 const inputCls =
   "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
 
+// Enter → <br>, Shift+Enter → new paragraph
+const EnterAsBr = Extension.create({
+  name: "enterAsBr",
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => this.editor.commands.setHardBreak(),
+      "Shift-Enter": ({ editor }) => editor.commands.splitBlock(),
+    };
+  },
+});
+
 const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   { content, onChange },
   ref
 ) {
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ hardBreak: false }),
       Underline,
       Image.configure({ inline: false, allowBase64: false }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "Начните вводить содержимое шага..." }),
+      EnterAsBr,
     ],
     content,
     onUpdate({ editor }) {
@@ -109,7 +122,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
           <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnCls(editor.isActive("bulletList"))} title="Список">• —</button>
           <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnCls(editor.isActive("orderedList"))} title="Нумерованный список">1.</button>
           <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={btnCls(editor.isActive("blockquote"))} title="Цитата">&ldquo;&rdquo;</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={btnCls(editor.isActive("codeBlock"))} title="Код">{"</>"}</button>
+          <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={btnCls(editor.isActive("codeBlock"))} title="Код">{"</>"}  </button>
           <div className="w-px bg-gray-300 mx-1" />
           <button type="button" onClick={setLink} className={btnCls(editor.isActive("link"))} title="Ссылка">🔗</button>
           <button type="button" onClick={openImgModal} className={btnCls(false)} title="Вставить изображение">🖼</button>
