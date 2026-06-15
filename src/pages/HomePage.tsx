@@ -12,7 +12,7 @@ import Modal from "../components/Modal";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ToastContainer from "../components/ToastContainer";
 import { useToast } from "../hooks/useToast";
-import { fetchCourses, fetchFileContent } from "../api/courses";
+import { fetchCourses, fetchFileContent, fetchSteps } from "../api/courses";
 import type { Course } from "../api/courses";
 import {
   createCourse,
@@ -45,24 +45,27 @@ function courseToNavItem(c: Course): NavItem {
     author: c.author,
     description: c.description,
     rating: c.rating,
-    modules: c.modules?.map((m) => ({
-      id: m.id,
-      name: m.name,
-      kind: "module" as ItemKind,
-      submodules: m.submodules?.map((s) => ({
-        id: s.id,
-        name: s.name,
-        kind: "submodule" as ItemKind,
-        steps: s.steps?.map((st) => ({
-          id: st.id,
-          name: `Шаг ${st.number}`,
-          kind: "step" as ItemKind,
-          isTest: st.is_test,
-          number: st.number,
-          contentUrl: st.content_url,
-        })) ?? [],
+    modules:
+      c.modules?.map((m) => ({
+        id: m.id,
+        name: m.name,
+        kind: "module" as ItemKind,
+        submodules:
+          m.submodules?.map((s) => ({
+            id: s.id,
+            name: s.name,
+            kind: "submodule" as ItemKind,
+            steps:
+              s.steps?.map((st) => ({
+                id: st.id,
+                name: `Шаг ${st.number}`,
+                kind: "step" as ItemKind,
+                isTest: st.is_test,
+                number: st.number,
+                contentUrl: st.content_url,
+              })) ?? [],
+          })) ?? [],
       })) ?? [],
-    })) ?? [],
   };
 }
 
@@ -91,10 +94,18 @@ function countSteps(item: NavItem): number {
   if (item.kind === "step") return 1;
   if (item.kind === "submodule") return (item.steps ?? []).length;
   if (item.kind === "module")
-    return (item.submodules ?? []).reduce((s, sm) => s + (sm.steps ?? []).length, 0);
+    return (item.submodules ?? []).reduce(
+      (s, sm) => s + (sm.steps ?? []).length,
+      0,
+    );
   if (item.kind === "course")
     return (item.modules ?? []).reduce(
-      (s, m) => s + (m.submodules ?? []).reduce((ss, sm) => ss + (sm.steps ?? []).length, 0),
+      (s, m) =>
+        s +
+        (m.submodules ?? []).reduce(
+          (ss, sm) => ss + (sm.steps ?? []).length,
+          0,
+        ),
       0,
     );
   return 0;
@@ -103,24 +114,60 @@ function countSteps(item: NavItem): number {
 // ── field component ───────────────────────────────────────────────────────────
 
 function Field({
-  label, id, value, onChange, type = "text", placeholder, required, min, max, textarea,
+  label,
+  id,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  required,
+  min,
+  max,
+  textarea,
 }: {
-  label: string; id: string; value: string; onChange: (v: string) => void;
-  type?: string; placeholder?: string; required?: boolean;
-  min?: number; max?: number; textarea?: boolean;
+  label: string;
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  placeholder?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  textarea?: boolean;
 }) {
-  const cls = "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
+  const cls =
+    "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
   return (
     <div>
-      <label htmlFor={id} className="block text-sm font-medium text-text-heading mb-1">
+      <label
+        htmlFor={id}
+        className="block text-sm font-medium text-text-heading mb-1"
+      >
         {label} {required && <span className="text-red-500">*</span>}
       </label>
       {textarea ? (
-        <textarea id={id} className={cls} rows={3} value={value} placeholder={placeholder}
-          required={required} onChange={(e) => onChange(e.target.value)} />
+        <textarea
+          id={id}
+          className={cls}
+          rows={3}
+          value={value}
+          placeholder={placeholder}
+          required={required}
+          onChange={(e) => onChange(e.target.value)}
+        />
       ) : (
-        <input id={id} type={type} className={cls} value={value} placeholder={placeholder}
-          required={required} min={min} max={max} onChange={(e) => onChange(e.target.value)} />
+        <input
+          id={id}
+          type={type}
+          className={cls}
+          value={value}
+          placeholder={placeholder}
+          required={required}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(e.target.value)}
+        />
       )}
     </div>
   );
@@ -138,11 +185,10 @@ export default function HomePage() {
     { label: "Главная", items: [], kind: "course", path: "" },
   ]);
 
-  const currentItems = breadcrumbs[breadcrumbs.length - 1].items.length
-    ? breadcrumbs[breadcrumbs.length - 1].items
-    : allCourses;
-  const currentLevel = breadcrumbs[breadcrumbs.length - 1].kind;
+  const currentCrumb = breadcrumbs[breadcrumbs.length - 1];
   const isRoot = breadcrumbs.length === 1;
+  const currentItems = isRoot ? allCourses : currentCrumb.items;
+  const currentLevel = currentCrumb.kind;
 
   // ── load courses ─────────────────────────────────────────────────────────
   const loadCourses = useCallback(async () => {
@@ -157,7 +203,9 @@ export default function HomePage() {
     }
   }, []); // eslint-disable-line
 
-  useEffect(() => { loadCourses(); }, [loadCourses]);
+  useEffect(() => {
+    loadCourses();
+  }, [loadCourses]);
 
   // ── navigation ───────────────────────────────────────────────────────────
   const navigateTo = (item: NavItem) => {
@@ -176,7 +224,12 @@ export default function HomePage() {
     const childKind = getChildKind(item);
     setBreadcrumbs((prev) => [
       ...prev,
-      { label: item.name, items: children, kind: childKind, path: String(item.id) },
+      {
+        label: item.name,
+        items: children,
+        kind: childKind,
+        path: String(item.id),
+      },
     ]);
   };
 
@@ -193,8 +246,11 @@ export default function HomePage() {
     if (!confirmItem) return "";
     const steps = countSteps(confirmItem);
     const kindRu =
-      confirmItem.kind === "course" ? "курс" :
-      confirmItem.kind === "module" ? "модуль" : "подмодуль";
+      confirmItem.kind === "course"
+        ? "курс"
+        : confirmItem.kind === "module"
+          ? "модуль"
+          : "подмодуль";
     const label =
       confirmItem.kind === "step"
         ? `Шаг ${confirmItem.number ?? confirmItem.id}`
@@ -219,9 +275,15 @@ export default function HomePage() {
 
         let sha = "";
         try {
-          const res = await fetchFileContent(contentUrl, fileContentPath, confirmItem.isTest ?? false);
+          const res = await fetchFileContent(
+            contentUrl,
+            fileContentPath,
+            confirmItem.isTest ?? false,
+          );
           sha = res.sha ?? "";
-        } catch { /* файла нет на GitHub — ок */ }
+        } catch {
+          /* файла нет на GitHub — ок */
+        }
 
         await deleteFile({
           stepId: confirmItem.id as number,
@@ -236,15 +298,19 @@ export default function HomePage() {
           const last = prev[prev.length - 1];
           return [
             ...prev.slice(0, -1),
-            { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
+            {
+              ...last,
+              items: last.items.filter((i) => i.id !== confirmItem.id),
+            },
           ];
         });
         loadCourses();
-
       } else {
         // ── удаление курса / модуля / подмодуля ────────────────────────────
         const currentPath = buildPath(breadcrumbs);
-        const itemPath = currentPath ? `${currentPath}/${confirmItem.id}` : String(confirmItem.id);
+        const itemPath = currentPath
+          ? `${currentPath}/${confirmItem.id}`
+          : String(confirmItem.id);
         const typeMap = {
           course: "course",
           module: "module",
@@ -259,12 +325,16 @@ export default function HomePage() {
         });
 
         const kindRu =
-          confirmItem.kind === "course" ? "Курс" :
-          confirmItem.kind === "module" ? "Модуль" : "Подмодуль";
+          confirmItem.kind === "course"
+            ? "Курс"
+            : confirmItem.kind === "module"
+              ? "Модуль"
+              : "Подмодуль";
         toast.success(`${kindRu} удалён`);
 
         // если удаляем текущий уровень — поднимаемся на уровень выше
-        const itemIsCurrentLevel = breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
+        const itemIsCurrentLevel =
+          breadcrumbs[breadcrumbs.length - 1].path === String(confirmItem.id);
         if (itemIsCurrentLevel) {
           setBreadcrumbs((prev) => prev.slice(0, -1));
         } else {
@@ -273,7 +343,10 @@ export default function HomePage() {
             const last = prev[prev.length - 1];
             return [
               ...prev.slice(0, -1),
-              { ...last, items: last.items.filter((i) => i.id !== confirmItem.id) },
+              {
+                ...last,
+                items: last.items.filter((i) => i.id !== confirmItem.id),
+              },
             ];
           });
         }
@@ -298,18 +371,31 @@ export default function HomePage() {
 
   const handleCreateCourse = async () => {
     if (!ccName.trim() || !ccAuthor.trim() || !ccDesc.trim()) {
-      toast.error("Заполните обязательные поля"); return;
+      toast.error("Заполните обязательные поля");
+      return;
     }
     setCcLoading(true);
     try {
-      await createCourse({ name: ccName, author: ccAuthor, description: ccDesc, icon: ccIcon, message: "Create course via admin panel" });
+      await createCourse({
+        name: ccName,
+        author: ccAuthor,
+        description: ccDesc,
+        icon: ccIcon,
+        message: "Create course via admin panel",
+      });
       toast.success("Курс успешно создан");
       setShowCreateCourse(false);
-      setCcName(""); setCcAuthor(""); setCcDesc(""); setCcIcon(""); setCcRating("5");
+      setCcName("");
+      setCcAuthor("");
+      setCcDesc("");
+      setCcIcon("");
+      setCcRating("5");
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось создать курс");
-    } finally { setCcLoading(false); }
+    } finally {
+      setCcLoading(false);
+    }
   };
 
   // ── edit course modal ─────────────────────────────────────────────────────
@@ -322,44 +408,68 @@ export default function HomePage() {
   const [ecLoading, setEcLoading] = useState(false);
 
   const openEditCourse = (item: NavItem) => {
-    setEditTarget(item); setEcName(item.name); setEcAuthor(item.author ?? "");
-    setEcDesc(item.description ?? ""); setEcIcon(item.icon ?? ""); setEcRating(String(item.rating ?? 5));
+    setEditTarget(item);
+    setEcName(item.name);
+    setEcAuthor(item.author ?? "");
+    setEcDesc(item.description ?? "");
+    setEcIcon(item.icon ?? "");
+    setEcRating(String(item.rating ?? 5));
   };
 
   const handleEditCourse = async () => {
     if (!editTarget) return;
     if (!ecName.trim() || !ecAuthor.trim() || !ecDesc.trim()) {
-      toast.error("Заполните обязательные поля"); return;
+      toast.error("Заполните обязательные поля");
+      return;
     }
     setEcLoading(true);
     try {
-      await editCourse({ id: editTarget.id as number, name: ecName, author: ecAuthor, description: ecDesc, icon: ecIcon });
+      await editCourse({
+        id: editTarget.id as number,
+        name: ecName,
+        author: ecAuthor,
+        description: ecDesc,
+        icon: ecIcon,
+      });
       toast.success("Курс успешно отредактирован");
       setEditTarget(null);
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Не удалось отредактировать курс");
-    } finally { setEcLoading(false); }
+    } finally {
+      setEcLoading(false);
+    }
   };
 
   // ── create directory modal ────────────────────────────────────────────────
   const [showCreateDir, setShowCreateDir] = useState(false);
   const [cdName, setCdName] = useState("");
   const [cdLoading, setCdLoading] = useState(false);
-  const dirKind: "module" | "submodule" = currentLevel === "module" ? "module" : "submodule";
+  const dirKind: "module" | "submodule" =
+    currentLevel === "module" ? "module" : "submodule";
 
   const handleCreateDir = async () => {
-    if (!cdName.trim()) { toast.error("Введите имя"); return; }
+    if (!cdName.trim()) {
+      toast.error("Введите имя");
+      return;
+    }
     setCdLoading(true);
     const path = buildPath(breadcrumbs);
     try {
-      await createDirectory({ path: `${path}/${cdName}`, type: dirKind, message: `Create ${dirKind} via admin panel` });
+      await createDirectory({
+        path: `${path}/${cdName}`,
+        type: dirKind,
+        message: `Create ${dirKind} via admin panel`,
+      });
       toast.success(`${dirKind === "module" ? "Модуль" : "Подмодуль"} создан`);
-      setShowCreateDir(false); setCdName("");
+      setShowCreateDir(false);
+      setCdName("");
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания");
-    } finally { setCdLoading(false); }
+    } finally {
+      setCdLoading(false);
+    }
   };
 
   // ── create step modal ─────────────────────────────────────────────────────
@@ -370,16 +480,58 @@ export default function HomePage() {
   const handleCreateStep = async () => {
     setCsLoading(true);
     const submodulePath = buildPath(breadcrumbs);
-    const defaultContent = csIsTest ? JSON.stringify({ questions: [] }, null, 2) : "<p></p>";
-    const encodedContent = btoa(unescape(encodeURIComponent(defaultContent)));
+
+    const defaultContent = csIsTest
+      ? JSON.stringify(
+          {
+            question: "",
+            options: ["", "", "", ""],
+            answer: [],
+          },
+          null,
+          2,
+        )
+      : "<p></p>";
+
     try {
-      await createFile({ path: submodulePath, content: encodedContent, message: "Create step via admin panel", image: false, is_test: csIsTest });
+      await createFile({
+        path: submodulePath,
+        content: defaultContent,
+        message: "Create step via admin panel",
+        image: false,
+        is_test: csIsTest,
+      });
+
+      const steps = await fetchSteps(submodulePath);
+      const stepItems: NavItem[] = steps.map((st) => ({
+        id: st.id,
+        name: `Шаг ${st.number}`,
+        kind: "step",
+        isTest: st.is_test,
+        number: st.number,
+        contentUrl: st.content_url,
+      }));
+
+      setBreadcrumbs((prev) => {
+        const last = prev[prev.length - 1];
+        return [
+          ...prev.slice(0, -1),
+          {
+            ...last,
+            items: stepItems,
+          },
+        ];
+      });
+
       toast.success(`Шаг создан (${csIsTest ? "Тест" : "Теория"})`);
-      setShowCreateStep(false); setCsIsTest(false);
+      setShowCreateStep(false);
+      setCsIsTest(false);
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка создания шага");
-    } finally { setCsLoading(false); }
+    } finally {
+      setCsLoading(false);
+    }
   };
 
   // ── rename modal ──────────────────────────────────────────────────────────
@@ -387,15 +539,24 @@ export default function HomePage() {
   const [rnName, setRnName] = useState("");
   const [rnLoading, setRnLoading] = useState(false);
 
-  const openRename = (item: NavItem) => { setRenameTarget(item); setRnName(item.name); };
+  const openRename = (item: NavItem) => {
+    setRenameTarget(item);
+    setRnName(item.name);
+  };
 
   const handleRename = async () => {
     if (!renameTarget || !rnName.trim() || rnName === renameTarget.name) {
-      toast.info("Нет изменений"); return;
+      toast.info("Нет изменений");
+      return;
     }
     setRnLoading(true);
     const path = `${buildPath(breadcrumbs)}/${renameTarget.id}`;
-    const fileTypeName = renameTarget.kind === "course" ? "course" : renameTarget.kind === "module" ? "module" : "submodule";
+    const fileTypeName =
+      renameTarget.kind === "course"
+        ? "course"
+        : renameTarget.kind === "module"
+          ? "module"
+          : "submodule";
     try {
       await renameItem({ path, fileTypeName, newName: rnName });
       toast.success("Переименовано");
@@ -403,7 +564,9 @@ export default function HomePage() {
       loadCourses();
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка переименования");
-    } finally { setRnLoading(false); }
+    } finally {
+      setRnLoading(false);
+    }
   };
 
   // ── image upload ──────────────────────────────────────────────────────────
@@ -411,25 +574,38 @@ export default function HomePage() {
   const [dragOver, setDragOver] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
 
-  const handleImageFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith("image/")) { toast.error("Только изображения"); return; }
-    setUploadLoading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = (e.target?.result as string).split(",")[1];
-      const path = `${buildPath(breadcrumbs)}/${file.name}`;
-      try {
-        await createImage({ path, content: base64, message: "Upload image via admin panel" });
-        toast.success("Изображение загружено");
-      } catch (err: unknown) {
-        toast.error((err as Error).message ?? "Ошибка загрузки");
-      } finally { setUploadLoading(false); }
-    };
-    reader.readAsDataURL(file);
-  }, [breadcrumbs]); // eslint-disable-line
+  const handleImageFile = useCallback(
+    async (file: File) => {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Только изображения");
+        return;
+      }
+      setUploadLoading(true);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = (e.target?.result as string).split(",")[1];
+        const path = `${buildPath(breadcrumbs)}/${file.name}`;
+        try {
+          await createImage({
+            path,
+            content: base64,
+            message: "Upload image via admin panel",
+          });
+          toast.success("Изображение загружено");
+        } catch (err: unknown) {
+          toast.error((err as Error).message ?? "Ошибка загрузки");
+        } finally {
+          setUploadLoading(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [breadcrumbs],
+  ); // eslint-disable-line
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); setDragOver(false);
+    e.preventDefault();
+    setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) handleImageFile(file);
   };
@@ -448,15 +624,20 @@ export default function HomePage() {
       const blob = new Blob([sql], { type: "application/sql" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = "migration.sql"; a.click();
+      a.href = url;
+      a.download = "migration.sql";
+      a.click();
       URL.revokeObjectURL(url);
       toast.success("Миграция сгенерирована");
     } catch {
       toast.error("Не удалось сгенерировать миграцию");
-    } finally { setMigLoading(false); }
+    } finally {
+      setMigLoading(false);
+    }
   };
 
-  const canCreateDir = currentLevel === "module" || currentLevel === "submodule";
+  const canCreateDir =
+    currentLevel === "module" || currentLevel === "submodule";
   const isAtSubmodule = currentLevel === "step";
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -468,16 +649,31 @@ export default function HomePage() {
       <section className="bg-white rounded-xl shadow-sm border border-border p-6 sm:p-8 mb-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-text-heading mb-2">Управление курсами</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-heading mb-2">
+              Управление курсами
+            </h1>
             <p className="text-text-muted text-sm leading-relaxed">
-              Создавайте учебные материалы, редактируйте контент и генерируйте миграции.
+              Создавайте учебные материалы, редактируйте контент и генерируйте
+              миграции.
             </p>
           </div>
           {isRoot && (
-            <button onClick={() => setShowCreateCourse(true)}
-              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            <button
+              onClick={() => setShowCreateCourse(true)}
+              className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-4 py-2.5 rounded-lg transition"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
               Создать курс
             </button>
@@ -488,21 +684,53 @@ export default function HomePage() {
       {/* Info cards */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[
-          { bg: "bg-blue-50", color: "text-primary", label: "Иерархия", sub: "Курс → Модуль → Подмодуль → Шаг",
-            icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
-          { bg: "bg-green-50", color: "text-green-600", label: "Git-хранение", sub: "Контент версионируется в GitHub",
-            icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" },
-          { bg: "bg-purple-50", color: "text-purple-600", label: "Курсов загружено", sub: loading ? "Загрузка..." : `${allCourses.length} курс(ов)`,
-            icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" },
+          {
+            bg: "bg-blue-50",
+            color: "text-primary",
+            label: "Иерархия",
+            sub: "Курс → Модуль → Подмодуль → Шаг",
+            icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+          },
+          {
+            bg: "bg-green-50",
+            color: "text-green-600",
+            label: "Git-хранение",
+            sub: "Контент версионируется в GitHub",
+            icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4",
+          },
+          {
+            bg: "bg-purple-50",
+            color: "text-purple-600",
+            label: "Курсов загружено",
+            sub: loading ? "Загрузка..." : `${allCourses.length} курс(ов)`,
+            icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4",
+          },
         ].map((c) => (
-          <div key={c.label} className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4">
-            <div className={`w-10 h-10 ${c.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
-              <svg className={`w-5 h-5 ${c.color}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={c.icon} />
+          <div
+            key={c.label}
+            className="bg-white rounded-xl shadow-sm border border-border p-5 flex items-start gap-4"
+          >
+            <div
+              className={`w-10 h-10 ${c.bg} rounded-lg flex items-center justify-center flex-shrink-0`}
+            >
+              <svg
+                className={`w-5 h-5 ${c.color}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d={c.icon}
+                />
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-text-heading">{c.label}</p>
+              <p className="text-sm font-semibold text-text-heading">
+                {c.label}
+              </p>
               <p className="text-xs text-text-muted mt-1">{c.sub}</p>
             </div>
           </div>
@@ -514,38 +742,83 @@ export default function HomePage() {
         {/* Drop zone */}
         <div
           className={`border-2 border-dashed rounded-lg p-5 text-center text-text-muted text-sm cursor-pointer transition mb-5 ${
-            dragOver ? "border-primary bg-blue-50/40" : "border-gray-300 hover:border-primary hover:bg-blue-50/20"
+            dragOver
+              ? "border-primary bg-blue-50/40"
+              : "border-gray-300 hover:border-primary hover:bg-blue-50/20"
           } ${uploadLoading ? "opacity-50 pointer-events-none" : ""}`}
-          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
         >
-          <svg className="w-7 h-7 mx-auto mb-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          <svg
+            className="w-7 h-7 mx-auto mb-1.5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
           </svg>
-          {uploadLoading ? "Загрузка..." : "Перетащите изображение или нажмите для выбора"}
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileInput} />
+          {uploadLoading
+            ? "Загрузка..."
+            : "Перетащите изображение или нажмите для выбора"}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileInput}
+          />
         </div>
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2 mb-5">
           {canCreateDir && (
-            <button onClick={() => setShowCreateDir(true)}
-              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            <button
+              onClick={() => setShowCreateDir(true)}
+              className="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-hover text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+                />
               </svg>
               Создать {dirKind === "module" ? "модуль" : "подмодуль"}
             </button>
           )}
           {isAtSubmodule && (
-            <button onClick={() => setShowCreateStep(true)}
-              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            <button
+              onClick={() => setShowCreateStep(true)}
+              className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 4v16m8-8H4"
+                />
               </svg>
               Добавить шаг
             </button>
@@ -557,12 +830,14 @@ export default function HomePage() {
           {breadcrumbs.map((crumb, i) => (
             <span key={i} className="flex items-center gap-1">
               {i > 0 && <span className="text-gray-300">/</span>}
-              <button onClick={() => navigateToCrumb(i)}
+              <button
+                onClick={() => navigateToCrumb(i)}
                 className={`px-1.5 py-0.5 rounded transition ${
                   i === breadcrumbs.length - 1
                     ? "font-semibold text-text-heading cursor-default"
                     : "text-text-muted hover:text-primary hover:bg-blue-50"
-                }`}>
+                }`}
+              >
                 {crumb.label}
               </button>
             </span>
@@ -571,19 +846,38 @@ export default function HomePage() {
 
         {/* List */}
         <div className="text-xs font-semibold text-text-light uppercase tracking-wide mb-2">
-          {loading && isRoot ? "Загрузка..." : `Содержимое · ${currentItems.length} элем.`}
+          {loading && isRoot
+            ? "Загрузка..."
+            : `Содержимое · ${currentItems.length} элем.`}
         </div>
 
         {loading && isRoot ? (
           <div className="flex items-center justify-center py-12 text-text-muted">
-            <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-5 h-5 animate-spin mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
             Загрузка курсов...
           </div>
         ) : currentItems.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 border border-dashed rounded-lg text-sm">Пусто</div>
+          <div className="text-center py-10 text-gray-400 border border-dashed rounded-lg text-sm">
+            Пусто
+          </div>
         ) : (
           <ul className="space-y-1.5">
             {currentItems.map((item) => (
@@ -602,17 +896,40 @@ export default function HomePage() {
       </section>
 
       {/* Floating migration button */}
-      <button onClick={handleGenerateMigration} disabled={migLoading}
-        className="fixed bottom-6 right-6 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 z-40">
+      <button
+        onClick={handleGenerateMigration}
+        disabled={migLoading}
+        className="fixed bottom-6 right-6 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg transition flex items-center gap-2 z-40"
+      >
         {migLoading ? (
           <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v8H4z"
+            />
           </svg>
         ) : (
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-              d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+            />
           </svg>
         )}
         {migLoading ? "Генерация..." : "Сгенерировать миграцию"}
@@ -621,97 +938,249 @@ export default function HomePage() {
       {/* ── Modals ───────────────────────────────────────────────────────── */}
 
       {/* Create course */}
-      <Modal open={showCreateCourse} title="Создать курс" onClose={() => setShowCreateCourse(false)}
+      <Modal
+        open={showCreateCourse}
+        title="Создать курс"
+        onClose={() => setShowCreateCourse(false)}
         footer={
           <>
-            <button onClick={() => setShowCreateCourse(false)} disabled={ccLoading}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
-            <button onClick={handleCreateCourse} disabled={ccLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+            <button
+              onClick={() => setShowCreateCourse(false)}
+              disabled={ccLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleCreateCourse}
+              disabled={ccLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+            >
               {ccLoading ? "Создание..." : "Создать"}
             </button>
           </>
-        }>
+        }
+      >
         <div className="space-y-4">
-          <Field label="Название" id="cc-name" value={ccName} onChange={setCcName} required placeholder="Технический анализ" />
-          <Field label="Автор" id="cc-author" value={ccAuthor} onChange={setCcAuthor} required placeholder="Иван Иванов" />
-          <Field label="Описание" id="cc-desc" value={ccDesc} onChange={setCcDesc} required textarea placeholder="Краткое описание курса" />
-          <Field label="URL иконки" id="cc-icon" value={ccIcon} onChange={setCcIcon} placeholder="https://..." />
-          <Field label="Рейтинг" id="cc-rating" type="number" value={ccRating} onChange={setCcRating} min={1} max={5} />
+          <Field
+            label="Название"
+            id="cc-name"
+            value={ccName}
+            onChange={setCcName}
+            required
+            placeholder="Технический анализ"
+          />
+          <Field
+            label="Автор"
+            id="cc-author"
+            value={ccAuthor}
+            onChange={setCcAuthor}
+            required
+            placeholder="Иван Иванов"
+          />
+          <Field
+            label="Описание"
+            id="cc-desc"
+            value={ccDesc}
+            onChange={setCcDesc}
+            required
+            textarea
+            placeholder="Краткое описание курса"
+          />
+          <Field
+            label="URL иконки"
+            id="cc-icon"
+            value={ccIcon}
+            onChange={setCcIcon}
+            placeholder="https://..."
+          />
+          <Field
+            label="Рейтинг"
+            id="cc-rating"
+            type="number"
+            value={ccRating}
+            onChange={setCcRating}
+            min={1}
+            max={5}
+          />
         </div>
       </Modal>
 
       {/* Edit course */}
-      <Modal open={!!editTarget} title="Редактировать курс" onClose={() => setEditTarget(null)}
+      <Modal
+        open={!!editTarget}
+        title="Редактировать курс"
+        onClose={() => setEditTarget(null)}
         footer={
           <>
-            <button onClick={() => setEditTarget(null)} disabled={ecLoading}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
-            <button onClick={handleEditCourse} disabled={ecLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+            <button
+              onClick={() => setEditTarget(null)}
+              disabled={ecLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleEditCourse}
+              disabled={ecLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+            >
               {ecLoading ? "Сохранение..." : "Сохранить"}
             </button>
           </>
-        }>
+        }
+      >
         <div className="space-y-4">
-          <Field label="Название" id="ec-name" value={ecName} onChange={setEcName} required />
-          <Field label="Автор" id="ec-author" value={ecAuthor} onChange={setEcAuthor} required />
-          <Field label="Описание" id="ec-desc" value={ecDesc} onChange={setEcDesc} required textarea />
-          <Field label="URL иконки" id="ec-icon" value={ecIcon} onChange={setEcIcon} />
-          <Field label="Рейтинг" id="ec-rating" type="number" value={ecRating} onChange={setEcRating} min={1} max={5} />
+          <Field
+            label="Название"
+            id="ec-name"
+            value={ecName}
+            onChange={setEcName}
+            required
+          />
+          <Field
+            label="Автор"
+            id="ec-author"
+            value={ecAuthor}
+            onChange={setEcAuthor}
+            required
+          />
+          <Field
+            label="Описание"
+            id="ec-desc"
+            value={ecDesc}
+            onChange={setEcDesc}
+            required
+            textarea
+          />
+          <Field
+            label="URL иконки"
+            id="ec-icon"
+            value={ecIcon}
+            onChange={setEcIcon}
+          />
+          <Field
+            label="Рейтинг"
+            id="ec-rating"
+            type="number"
+            value={ecRating}
+            onChange={setEcRating}
+            min={1}
+            max={5}
+          />
         </div>
       </Modal>
 
       {/* Create directory */}
-      <Modal open={showCreateDir} title={`Создать ${dirKind === "module" ? "модуль" : "подмодуль"}`}
+      <Modal
+        open={showCreateDir}
+        title={`Создать ${dirKind === "module" ? "модуль" : "подмодуль"}`}
         onClose={() => setShowCreateDir(false)}
         footer={
           <>
-            <button onClick={() => setShowCreateDir(false)} disabled={cdLoading}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
-            <button onClick={handleCreateDir} disabled={cdLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+            <button
+              onClick={() => setShowCreateDir(false)}
+              disabled={cdLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleCreateDir}
+              disabled={cdLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+            >
               {cdLoading ? "Создание..." : "Создать"}
             </button>
           </>
-        }>
-        <Field label="Название" id="cd-name" value={cdName} onChange={setCdName} required
-          placeholder={dirKind === "module" ? "Введение" : "Урок 1"} />
+        }
+      >
+        <Field
+          label="Название"
+          id="cd-name"
+          value={cdName}
+          onChange={setCdName}
+          required
+          placeholder={dirKind === "module" ? "Введение" : "Урок 1"}
+        />
       </Modal>
 
       {/* Create step */}
-      <Modal open={showCreateStep} title="Добавить шаг"
-        onClose={() => { setShowCreateStep(false); setCsIsTest(false); }}
+      <Modal
+        open={showCreateStep}
+        title="Добавить шаг"
+        onClose={() => {
+          setShowCreateStep(false);
+          setCsIsTest(false);
+        }}
         footer={
           <>
-            <button onClick={() => { setShowCreateStep(false); setCsIsTest(false); }} disabled={csLoading}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
-            <button onClick={handleCreateStep} disabled={csLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-700 text-white transition disabled:opacity-50">
+            <button
+              onClick={() => {
+                setShowCreateStep(false);
+                setCsIsTest(false);
+              }}
+              disabled={csLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleCreateStep}
+              disabled={csLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-green-600 hover:bg-green-700 text-white transition disabled:opacity-50"
+            >
               {csLoading ? "Создание..." : "Создать шаг"}
             </button>
           </>
-        }>
+        }
+      >
         <div className="space-y-4">
           <p className="text-sm text-text-muted">Выберите тип нового шага:</p>
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => setCsIsTest(false)}
+            <button
+              onClick={() => setCsIsTest(false)}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
-                !csIsTest ? "border-primary bg-blue-50 text-primary" : "border-gray-200 text-text-muted hover:border-gray-300"
-              }`}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                !csIsTest
+                  ? "border-primary bg-blue-50 text-primary"
+                  : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
               <span className="text-sm font-medium">Теория</span>
             </button>
-            <button onClick={() => setCsIsTest(true)}
+            <button
+              onClick={() => setCsIsTest(true)}
               className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition ${
-                csIsTest ? "border-purple-500 bg-purple-50 text-purple-700" : "border-gray-200 text-text-muted hover:border-gray-300"
-              }`}>
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                csIsTest
+                  ? "border-purple-500 bg-purple-50 text-purple-700"
+                  : "border-gray-200 text-text-muted hover:border-gray-300"
+              }`}
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
               </svg>
               <span className="text-sm font-medium">Тест</span>
             </button>
@@ -720,18 +1189,36 @@ export default function HomePage() {
       </Modal>
 
       {/* Rename */}
-      <Modal open={!!renameTarget} title="Переименовать" onClose={() => setRenameTarget(null)}
+      <Modal
+        open={!!renameTarget}
+        title="Переименовать"
+        onClose={() => setRenameTarget(null)}
         footer={
           <>
-            <button onClick={() => setRenameTarget(null)} disabled={rnLoading}
-              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50">Отмена</button>
-            <button onClick={handleRename} disabled={rnLoading}
-              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50">
+            <button
+              onClick={() => setRenameTarget(null)}
+              disabled={rnLoading}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={handleRename}
+              disabled={rnLoading}
+              className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
+            >
               {rnLoading ? "Сохранение..." : "Переименовать"}
             </button>
           </>
-        }>
-        <Field label="Новое имя" id="rn-name" value={rnName} onChange={setRnName} required />
+        }
+      >
+        <Field
+          label="Новое имя"
+          id="rn-name"
+          value={rnName}
+          onChange={setRnName}
+          required
+        />
       </Modal>
 
       {/* Delete confirm */}
