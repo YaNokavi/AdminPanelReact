@@ -16,6 +16,10 @@ export interface StepEditorState {
   submodulePath: string; // e.g. "courseId/moduleId/submoduleId"
 }
 
+export interface HomeReturnState {
+  returnPath: string; // submodulePath to restore breadcrumbs
+}
+
 const emptyTest = (): TestData => ({
   question: "",
   options: ["", "", "", ""],
@@ -33,6 +37,12 @@ export default function StepEditorPage() {
     if (!state) navigate("/", { replace: true });
   }, []); // eslint-disable-line
 
+  const goBack = () => {
+    if (!state) { navigate("/"); return; }
+    const returnState: HomeReturnState = { returnPath: state.submodulePath };
+    navigate("/", { state: returnState });
+  };
+
   const [isTest, setIsTest] = useState(state?.isTest ?? false);
   const [htmlContent, setHtmlContent] = useState("");
   const [testData, setTestData] = useState<TestData>(emptyTest());
@@ -44,7 +54,7 @@ export default function StepEditorPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // ── Image insert refs ────────────────────────────────────────────────────────
+  // ── Image insert refs ─────────────────────────────────────────────────────────
   const editorRef = useRef<TiptapEditorRef>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [imageUploading, setImageUploading] = useState(false);
@@ -83,7 +93,7 @@ export default function StepEditorPage() {
     reader.readAsDataURL(file);
   }, [state]); // eslint-disable-line
 
-  // ── Load content ──────────────────────────────────────────────────────────────
+  // ── Load content ───────────────────────────────────────────────────────────
   const loadContent = useCallback(async () => {
     if (!state) return;
     setLoading(true);
@@ -96,7 +106,6 @@ export default function StepEditorPage() {
         if (typeof raw === "string") {
           try {
             const parsed = JSON.parse(raw);
-            // Поддержка старого формата { questions: [...] } — берём первый вопрос
             if (parsed.questions && Array.isArray(parsed.questions)) {
               setTestData(emptyTest());
             } else {
@@ -122,12 +131,11 @@ export default function StepEditorPage() {
 
   useEffect(() => { loadContent(); }, [loadContent]);
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
+  // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
     const filePath = `${state.submodulePath}/${state.stepId}.txt`;
-    // Отправляем plain text — бэкенд сам кодирует в base64 для GitHub API
     const contentToSave = isTest ? JSON.stringify(testData, null, 2) : htmlContent;
     try {
       if (fileSha) {
@@ -156,7 +164,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ────────────────────────────────────────────────────────
+  // ── Toggle test/theory ──────────────────────────────────────────────────────
   const handleToggleType = async () => {
     if (!state) return;
     const newIsTest = !isTest;
@@ -172,7 +180,7 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ──────────────────────────────────────────────────────────────
+  // ── Delete step ───────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
@@ -185,7 +193,9 @@ export default function StepEditorPage() {
         sha: fileSha,
       });
       toast.success("Шаг удалён");
-      navigate("/", { replace: true });
+      // Возвращаемся в нужный сабмодуль, а не на главную
+      const returnState: HomeReturnState = { returnPath: state.submodulePath };
+      navigate("/", { replace: true, state: returnState });
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка удаления");
       setDeleting(false);
@@ -211,7 +221,7 @@ export default function StepEditorPage() {
       {/* Top bar */}
       <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
         <button
-          onClick={() => navigate(-1)}
+          onClick={goBack}
           className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition"
           title="Назад"
         >
