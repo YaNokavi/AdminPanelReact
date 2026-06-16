@@ -23,6 +23,41 @@ interface Props {
   onChange: (html: string) => void;
 }
 
+// Расширяем Image: inline, сохраняем width / height / style из HTML
+const CustomImage = Image.extend({
+  inline() {
+    return true;
+  },
+  group() {
+    return "inline";
+  },
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: null },
+      title: { default: null },
+      width: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("width") ?? null,
+        renderHTML: (attrs) =>
+          attrs.width ? { width: attrs.width } : {},
+      },
+      height: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("height") ?? null,
+        renderHTML: (attrs) =>
+          attrs.height ? { height: attrs.height } : {},
+      },
+      style: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("style") ?? null,
+        renderHTML: (attrs) =>
+          attrs.style ? { style: attrs.style } : {},
+      },
+    };
+  },
+});
+
 const btnCls = (active: boolean) =>
   `px-2 py-1 rounded text-sm transition ${
     active
@@ -41,7 +76,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     extensions: [
       StarterKit.configure({ hardBreak: false }),
       Underline,
-      Image.configure({ inline: false, allowBase64: false }),
+      CustomImage.configure({ allowBase64: false }),
       Link.configure({ openOnClick: false }),
       Placeholder.configure({
         placeholder: "Начните вводить содержимое шага...",
@@ -89,19 +124,45 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   const [imgUrl, setImgUrl] = useState("");
   const [imgWidth, setImgWidth] = useState("");
   const [imgHeight, setImgHeight] = useState("");
+  const [imgStyle, setImgStyle] = useState("");
+  const [imgError, setImgError] = useState("");
 
   const openImgModal = () => {
     setImgUrl("");
     setImgWidth("");
     setImgHeight("");
+    setImgStyle("");
+    setImgError("");
     setShowImgModal(true);
   };
 
   const handleInsertImg = () => {
-    if (!editor || !imgUrl.trim()) return;
-    const attrs: Record<string, string> = { src: imgUrl.trim() };
-    if (imgWidth.trim()) attrs.width = imgWidth.trim();
-    if (imgHeight.trim()) attrs.height = imgHeight.trim();
+    if (!editor) return;
+
+    const src = imgUrl.trim();
+    if (!src) {
+      setImgError("Укажите URL изображения");
+      return;
+    }
+
+    const wRaw = imgWidth.trim();
+    const hRaw = imgHeight.trim();
+
+    if (wRaw && (!/^\d+$/.test(wRaw) || Number(wRaw) < 1)) {
+      setImgError("Ширина должна быть целым числом больше 0 (px)");
+      return;
+    }
+    if (hRaw && (!/^\d+$/.test(hRaw) || Number(hRaw) < 1)) {
+      setImgError("Высота должна быть целым числом больше 0 (px)");
+      return;
+    }
+
+    const attrs: Record<string, string> = { src };
+    if (wRaw) attrs.width = wRaw;
+    if (hRaw) attrs.height = hRaw;
+    const style = imgStyle.trim();
+    if (style) attrs.style = style;
+
     editor.chain().focus().setImage(attrs).run();
     setShowImgModal(false);
   };
@@ -265,7 +326,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                   className={inputCls}
                   placeholder="https://raw.githubusercontent.com/..."
                   value={imgUrl}
-                  onChange={(e) => setImgUrl(e.target.value)}
+                  onChange={(e) => { setImgUrl(e.target.value); setImgError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleInsertImg()}
                 />
               </div>
@@ -274,27 +335,56 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                   <label className="block text-sm font-medium text-text-heading mb-1">
                     Ширина
                   </label>
-                  <input
-                    type="text"
-                    className={inputCls}
-                    placeholder="напр. 600 или 80%"
-                    value={imgWidth}
-                    onChange={(e) => setImgWidth(e.target.value)}
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      className={inputCls + " pr-9"}
+                      placeholder="—"
+                      value={imgWidth}
+                      onChange={(e) => { setImgWidth(e.target.value); setImgError(""); }}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
+                      px
+                    </span>
+                  </div>
                 </div>
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-text-heading mb-1">
                     Высота
                   </label>
-                  <input
-                    type="text"
-                    className={inputCls}
-                    placeholder="напр. 400"
-                    value={imgHeight}
-                    onChange={(e) => setImgHeight(e.target.value)}
-                  />
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      className={inputCls + " pr-9"}
+                      placeholder="—"
+                      value={imgHeight}
+                      onChange={(e) => { setImgHeight(e.target.value); setImgError(""); }}
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
+                      px
+                    </span>
+                  </div>
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-text-heading mb-1">
+                  Style <span className="text-text-muted text-xs font-normal">(необязательно)</span>
+                </label>
+                <input
+                  type="text"
+                  className={inputCls}
+                  placeholder="напр. vertical-align: middle"
+                  value={imgStyle}
+                  onChange={(e) => { setImgStyle(e.target.value); setImgError(""); }}
+                />
+              </div>
+              {imgError && (
+                <p className="text-sm text-red-500">{imgError}</p>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button
