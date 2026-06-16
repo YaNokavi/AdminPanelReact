@@ -34,7 +34,7 @@
 
 - **Фронт** деплоится на GitHub Pages: `https://yanokavi.github.io/AdminPanelReact/`
 - **Бэкенд** деплоится на Amvera: `https://admincuna-back-anderm.amvera.io`
-- Бэкенд настраивается через `.env` (переменные: `PGUSER`, `PGHOST`, `PGDATABASE`, `PGPASSWORD`, `PGPORT`, `GITHUB_TOKEN`, `USERNAME`, `PASSWORD`)
+- Бэкенд настраивается через `.env` (переменные: `PGUSER`, `PGHOST`, `PGDATABASE`, `PGPASSWORD`, `PGPORT`, `GITHUB_TOKEN`, `USERNAME`, `PASSWORD`, `JWT_SECRET`)
 
 ---
 
@@ -111,8 +111,8 @@ text-light: "#9ca3af"
 ```
 src/
 ├── api/
-│   ├── client.ts          # apiFetch() — базовый fetch с credentials, BASE_URL из VITE_API_URL
-│   ├── auth.ts            # login()
+│   ├── client.ts          # apiFetch() — базовый fetch с JWT из sessionStorage, BASE_URL из VITE_API_URL
+│   ├── auth.ts            # login() — сохраняет JWT токен в sessionStorage
 │   ├── courses.ts         # fetchCourses, fetchModules, fetchSubmodules, fetchSteps,
 │   │                      # fetchFolderImages, fetchFileContent
 │   │                      # Types: Course, CourseModule, Submodule, Step, FileContent, ImageFile
@@ -142,7 +142,8 @@ src/
 │   ├── ContactsPage.tsx    # Форма контактов (статика)
 │   └── NotFoundPage.tsx    # 404
 ├── providers/
-│   ├── AuthContext.tsx     # isAuthenticated (sessionStorage), login(), logout()
+│   ├── AuthContext.tsx     # isAuthenticated (проверяет оба ключа: cunaedu_auth + cunaedu_token),
+│   │                       # login() сохраняет токен, logout() очищает оба ключа
 │   └── router.tsx          # HashRouter, маршруты: /login, /, /step-editor, /faq, /contacts
 ├── App.tsx                 # Пустой (thin wrapper, не используется)
 ├── main.tsx                # Точка входа: StrictMode > AuthProvider > RouterProvider
@@ -180,10 +181,15 @@ interface StepEditorState {
 
 ## Авторизация
 
-- Форма логина → `POST /api/login` → сервер создаёт Express session
-- Фронт хранит флаг `cunaedu_auth = "true"` в `sessionStorage`
-- `RequireAuth` проверяет `isAuthenticated` из `AuthContext`
-- `apiFetch` всегда передаёт `credentials: "include"` для cookies
+- Форма логина → `POST /api/login` → сервер возвращает JWT-токен
+- Фронт сохраняет токен в `sessionStorage` под ключом `cunaedu_token`
+- Фронт сохраняет флаг `cunaedu_auth = "true"` в `sessionStorage`
+- `RequireAuth` проверяет `isAuthenticated` из `AuthContext` (оба ключа должны быть присутствовать)
+- `apiFetch` автоматически добавляет заголовок `Authorization: Bearer <token>` из `sessionStorage`
+- `logout()` удаляет оба ключа: `cunaedu_token` и `cunaedu_auth`
+- Токен живёт 24 часа (задаётся через `expiresIn` в `jwt.sign`)
+
+> ⚠️ **Причина перехода с cookie-сессий на JWT:** фронт на GitHub Pages и бэкенд на Amvera — разные домены. Safari (ITP) блокирует cross-site cookies с `SameSite=None`, поэтому `Set-Cookie` игнорировался браузером и каждый запрос возвращал 401.
 
 ---
 
@@ -191,7 +197,7 @@ interface StepEditorState {
 
 | Метод  | Путь                                             | Описание                                               |
 | ------ | ------------------------------------------------ | ------------------------------------------------------ |
-| POST   | `/api/login`                                     | Авторизация                                            |
+| POST   | `/api/login`                                     | Авторизация — возвращает `{ success, token }`          |
 | GET    | `/api/courses?path=&type=`                       | Иерархия (type: Курсы/Модули/Сабмодули/Шаги)           |
 | GET    | `/api/folder-images?path=`                       | Список папок с изображениями                           |
 | GET    | `/api/file-content?fileUrl=&filePath=&fileType=` | Контент файла с GitHub + SHA                           |
@@ -221,14 +227,13 @@ interface StepEditorState {
 
 ## Бэкенд (server.js)
 
-**Стек:** Node.js ESM, Express 4, `pg` (PostgreSQL), `axios`, `express-session`, `winston`, `dotenv`
+**Стек:** Node.js ESM, Express 4, `pg` (PostgreSQL), `axios`, `jsonwebtoken`, `winston`, `dotenv`
 
 **Порт:** 8080
 
 **CORS разрешён для:**
 
-- `https://cunaedu.online`
-- `https://en.cunaedu.online`
+- `https://yanokavi.github.io`
 - `http://127.0.0.1:5500`, `5501`
 - `http://localhost:5173`
 
@@ -237,6 +242,8 @@ interface StepEditorState {
 **`pool`** — обёртка над `pg.Pool`, перехватывает каждый SQL-запрос и вызывает `processQuery()` для записи в таблицу миграций.
 
 **`originalPool`** — чистый `pg.Pool` без обёртки. Используется в `delete-directory` чтобы не триггерить `processQuery` (которая не умеет обрабатывать DELETE для `course_module`/`submodule`/`course`).
+
+**`authenticateAdmin`** — middleware для защиты роутов. Проверяет заголовок `Authorization: Bearer <token>`, верифицирует JWT через `jwt.verify(token, JWT_SECRET)`. При невалидном или отсутствующем токене возвращает 401.
 
 **`getFileSha(path)`** — получает SHA файла через `GET https://api.github.com/repos/YaNokavi/CunaEduFile/contents/courses/{path}`.
 
@@ -248,10 +255,9 @@ interface StepEditorState {
 
 ### Известные проблемы (не исправлены)
 
-- 🚨 `GITHUB_TOKEN`, логин/пароль и session secret хардкожены как fallback (есть и `.env` ветка, и хардкод ветка подряд)
-- ⚠️ `authenticateAdmin` middleware объявлен, но **не применяется** ни к одному роуту
 - ⚠️ `connectToDb()` вызывает сам себя в catch без задержки (потенциальный stack overflow)
 - ⚠️ Внутри `processQuery` имена таблиц написаны как `coursemodule`/`submodulestep` — это артефакт старого кода, реальные имена таблиц `course_module`/`submodule_step`
+- ⚠️ `dotenv.config()` должен вызываться **первым** до любых `process.env.*` обращений (в том числе до `JWT_SECRET`)
 
 ---
 
@@ -344,6 +350,12 @@ PGPORT=
 GITHUB_TOKEN=ghp_...
 USERNAME=adminCuna
 PASSWORD=...
+JWT_SECRET=<случайная строка минимум 32 символа>
+```
+
+`JWT_SECRET` генерируется один раз:
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
 ---
@@ -352,7 +364,7 @@ PASSWORD=...
 
 ### ✅ Реализовано
 
-- Авторизация (login/logout, session)
+- Авторизация (login/logout, JWT)
 - Загрузка иерархии курсов с API
 - Навигация по иерархии с хлебными крошками
 - Создание курса, модуля, подмодуля
