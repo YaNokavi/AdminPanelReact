@@ -57,7 +57,7 @@ export default function StepEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [sourceMode, setSourceMode] = useState(false);
 
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
@@ -101,7 +101,6 @@ export default function StepEditorPage() {
     nav?.();
   };
 
-  // ── Загрузка при каждом новом navigate() ───────────────────────────────────────────
   useEffect(() => {
     if (!state) return;
 
@@ -111,7 +110,7 @@ export default function StepEditorPage() {
     setFileSha("");
     setDirty(false);
     setLoading(true);
-    setPreviewMode(false);
+    setSourceMode(false);
     initialHtml.current = "";
     initialTestData.current = "";
 
@@ -208,7 +207,6 @@ export default function StepEditorPage() {
     setDirty(JSON.stringify(d) !== initialTestData.current);
   };
 
-  // ── Save ──────────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!state) return;
     setSaving(true);
@@ -243,7 +241,6 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Toggle test/theory ────────────────────────────────────────────────
   const handleToggleConfirm = async () => {
     if (!state) return;
     setToggling(true);
@@ -260,7 +257,7 @@ export default function StepEditorPage() {
         initialHtml.current = "";
       }
       setDirty(false);
-      setPreviewMode(false);
+      setSourceMode(false);
       toast.success(`Тип изменён на «${newIsTest ? "Тест" : "Теория"}»`);
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка смены типа");
@@ -270,7 +267,6 @@ export default function StepEditorPage() {
     }
   };
 
-  // ── Delete step ──────────────────────────────────────────────────────────────
   const handleDeleteStep = async () => {
     if (!state) return;
     setDeleting(true);
@@ -347,13 +343,13 @@ export default function StepEditorPage() {
           )}
         </button>
 
-        {/* Preview toggle — только для теории */}
+        {/* Source toggle — только для теории */}
         {!isTest && !loading && (
           <div className="flex items-center rounded-lg border border-border overflow-hidden">
             <button
-              onClick={() => setPreviewMode(false)}
+              onClick={() => setSourceMode(false)}
               className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 transition ${
-                !previewMode
+                !sourceMode
                   ? "bg-primary text-white"
                   : "bg-white text-text-muted hover:bg-surface"
               }`}
@@ -366,21 +362,19 @@ export default function StepEditorPage() {
               Редактор
             </button>
             <button
-              onClick={() => setPreviewMode(true)}
+              onClick={() => setSourceMode(true)}
               className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 transition ${
-                previewMode
+                sourceMode
                   ? "bg-primary text-white"
                   : "bg-white text-text-muted hover:bg-surface"
               }`}
-              title="Предпросмотр"
+              title="Исходный HTML"
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
               </svg>
-              Просмотр
+              HTML
             </button>
           </div>
         )}
@@ -437,7 +431,7 @@ export default function StepEditorPage() {
         ) : (
           <>
             {/* TiptapEditor всегда смонтирован, скрывается через hidden чтобы не терять состояние */}
-            <div className={previewMode ? "hidden" : "block"}>
+            <div className={sourceMode ? "hidden" : "block"}>
               <TiptapEditor
                 ref={editorRef}
                 content={htmlContent}
@@ -445,27 +439,22 @@ export default function StepEditorPage() {
               />
             </div>
 
-            {/* Preview */}
-            {previewMode && (
-              <div className="max-w-3xl mx-auto bg-white rounded-xl border border-border shadow-sm">
-                <div className="flex items-center gap-2 px-6 py-3 border-b border-border">
-                  <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* HTML source view */}
+            {sourceMode && (
+              <div className="max-w-4xl mx-auto rounded-xl border border-border overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 border-b border-gray-700">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
                   </svg>
-                  <span className="text-sm font-medium text-text-muted">Предпросмотр</span>
+                  <span className="text-sm font-medium text-gray-300">Исходный HTML</span>
                   {dirty && (
-                    <span className="ml-auto text-xs text-orange-500">
-                      Показаны несохранённые изменения
+                    <span className="ml-auto text-xs text-orange-400">
+                      Несохранённые изменения
                     </span>
                   )}
                 </div>
-                <div
-                  className="prose prose-sm sm:prose max-w-none p-6"
-                  dangerouslySetInnerHTML={{ __html: htmlContent }}
-                />
+                <pre className="bg-gray-900 text-gray-100 text-sm font-mono p-6 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">{htmlContent}</pre>
               </div>
             )}
           </>
