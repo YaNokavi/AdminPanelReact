@@ -39,20 +39,17 @@ const CustomImage = Image.extend({
       width: {
         default: null,
         parseHTML: (el) => el.getAttribute("width") ?? null,
-        renderHTML: (attrs) =>
-          attrs.width ? { width: attrs.width } : {},
+        renderHTML: (attrs) => (attrs.width ? { width: attrs.width } : {}),
       },
       height: {
         default: null,
         parseHTML: (el) => el.getAttribute("height") ?? null,
-        renderHTML: (attrs) =>
-          attrs.height ? { height: attrs.height } : {},
+        renderHTML: (attrs) => (attrs.height ? { height: attrs.height } : {}),
       },
       style: {
         default: null,
         parseHTML: (el) => el.getAttribute("style") ?? null,
-        renderHTML: (attrs) =>
-          attrs.style ? { style: attrs.style } : {},
+        renderHTML: (attrs) => (attrs.style ? { style: attrs.style } : {}),
       },
     };
   },
@@ -119,15 +116,18 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     editor.chain().focus().setLink({ href: url }).run();
   }, [editor]);
 
-  // ── Image insert modal ────────────────────────────────────────────────────
+  // ── Image modal state ────────────────────────────────────────────────────────
   const [showImgModal, setShowImgModal] = useState(false);
+  const [imgEditMode, setImgEditMode] = useState(false); // false = insert, true = edit
   const [imgUrl, setImgUrl] = useState("");
   const [imgWidth, setImgWidth] = useState("");
   const [imgHeight, setImgHeight] = useState("");
   const [imgStyle, setImgStyle] = useState("");
   const [imgError, setImgError] = useState("");
 
+  // Открыть для вставки нового изображения
   const openImgModal = () => {
+    setImgEditMode(false);
     setImgUrl("");
     setImgWidth("");
     setImgHeight("");
@@ -136,34 +136,67 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     setShowImgModal(true);
   };
 
-  const handleInsertImg = () => {
+  // Открыть для редактирования существующего изображения
+  const openImgEditModal = useCallback(() => {
     if (!editor) return;
+    const attrs = editor.getAttributes("image");
+    setImgEditMode(true);
+    setImgUrl((attrs.src as string) ?? "");
+    setImgWidth((attrs.width as string) ?? "");
+    setImgHeight((attrs.height as string) ?? "");
+    setImgStyle((attrs.style as string) ?? "");
+    setImgError("");
+    setShowImgModal(true);
+  }, [editor]);
 
+  // Обработчик клика по EditorContent: если кликнули по изображению — открываем модалку редактирования
+  const handleEditorClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === "IMG") {
+        // Даём Tiptap время выставить selection на изображение, затем читаем атрибуты
+        setTimeout(() => openImgEditModal(), 0);
+      }
+    },
+    [openImgEditModal],
+  );
+
+  const validateAndGetAttrs = (): Record<string, string> | null => {
     const src = imgUrl.trim();
     if (!src) {
       setImgError("Укажите URL изображения");
-      return;
+      return null;
     }
-
     const wRaw = imgWidth.trim();
     const hRaw = imgHeight.trim();
-
     if (wRaw && (!/^\d+$/.test(wRaw) || Number(wRaw) < 1)) {
       setImgError("Ширина должна быть целым числом больше 0 (px)");
-      return;
+      return null;
     }
     if (hRaw && (!/^\d+$/.test(hRaw) || Number(hRaw) < 1)) {
       setImgError("Высота должна быть целым числом больше 0 (px)");
-      return;
+      return null;
     }
-
     const attrs: Record<string, string> = { src };
-    if (wRaw) attrs.width = wRaw;
-    if (hRaw) attrs.height = hRaw;
+    if (wRaw) attrs.width = wRaw; else attrs.width = "";
+    if (hRaw) attrs.height = hRaw; else attrs.height = "";
     const style = imgStyle.trim();
-    if (style) attrs.style = style;
+    attrs.style = style || "";
+    return attrs;
+  };
 
-    editor.chain().focus().setImage(attrs).run();
+  const handleConfirmImg = () => {
+    if (!editor) return;
+    const attrs = validateAndGetAttrs();
+    if (!attrs) return;
+
+    if (imgEditMode) {
+      // Обновляем атрибуты уже выбранного изображения
+      editor.chain().focus().updateAttributes("image", attrs).run();
+    } else {
+      // Вставляем новое
+      editor.chain().focus().setImage(attrs).run();
+    }
     setShowImgModal(false);
   };
 
@@ -302,18 +335,22 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
             ↪
           </button>
         </div>
-        <EditorContent
-          editor={editor}
-          className="tiptap-editor-content p-4 min-h-[300px] overflow-x-hidden min-w-0"
-        />
+
+        {/* Обёртка: перехватываем клик по изображению */}
+        <div onClick={handleEditorClick}>
+          <EditorContent
+            editor={editor}
+            className="tiptap-editor-content p-4 min-h-[300px] overflow-x-hidden min-w-0"
+          />
+        </div>
       </div>
 
-      {/* Image insert modal */}
+      {/* Image modal (вставка / редактирование) */}
       {showImgModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
             <h2 className="text-base font-semibold text-text-heading mb-4">
-              Вставить изображение
+              {imgEditMode ? "Редактировать изображение" : "Вставить изображение"}
             </h2>
             <div className="space-y-3">
               <div>
@@ -327,7 +364,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                   placeholder="https://raw.githubusercontent.com/..."
                   value={imgUrl}
                   onChange={(e) => { setImgUrl(e.target.value); setImgError(""); }}
-                  onKeyDown={(e) => e.key === "Enter" && handleInsertImg()}
+                  onKeyDown={(e) => e.key === "Enter" && handleConfirmImg()}
                 />
               </div>
               <div className="flex gap-3">
@@ -372,7 +409,8 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
               </div>
               <div>
                 <label className="block text-sm font-medium text-text-heading mb-1">
-                  Style <span className="text-text-muted text-xs font-normal">(необязательно)</span>
+                  Style{" "}
+                  <span className="text-text-muted text-xs font-normal">(необязательно)</span>
                 </label>
                 <input
                   type="text"
@@ -396,11 +434,11 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
               </button>
               <button
                 type="button"
-                onClick={handleInsertImg}
+                onClick={handleConfirmImg}
                 disabled={!imgUrl.trim()}
                 className="px-4 py-2 text-sm rounded-lg bg-primary hover:bg-primary-hover text-white transition disabled:opacity-50"
               >
-                Вставить
+                {imgEditMode ? "Сохранить" : "Вставить"}
               </button>
             </div>
           </div>
