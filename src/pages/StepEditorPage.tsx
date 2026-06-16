@@ -131,7 +131,7 @@ export default function StepEditorPage() {
               /* ignore */
             }
           } else if (raw && typeof raw === "object" && "question" in raw) {
-            parsed = raw as TestData;
+            parsed = raw as unknown as TestData;
           }
           setTestData(parsed);
           initialTestData.current = JSON.stringify(parsed);
@@ -177,7 +177,7 @@ export default function StepEditorPage() {
             /* ignore */
           }
         } else if (raw && typeof raw === "object" && "question" in raw) {
-          parsed = raw as TestData;
+          parsed = raw as unknown as TestData;
         }
         setTestData(parsed);
         initialTestData.current = JSON.stringify(parsed);

@@ -46,10 +46,19 @@
 }
 
 /* Жирный / курсив / подчёркнутый / зачёркнутый */
-.tiptap-editor-content .tiptap strong { font-weight: 700; }
-.tiptap-editor-content .tiptap em { font-style: italic; }
-.tiptap-editor-content .tiptap u { text-decoration: underline; }
-.tiptap-editor-content .tiptap s { text-decoration: line-through; color: #9ca3af; }
+.tiptap-editor-content .tiptap strong {
+  font-weight: 700;
+}
+.tiptap-editor-content .tiptap em {
+  font-style: italic;
+}
+.tiptap-editor-content .tiptap u {
+  text-decoration: underline;
+}
+.tiptap-editor-content .tiptap s {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
 
 /* Списки */
 .tiptap-editor-content .tiptap ul {
@@ -81,7 +90,7 @@
 
 /* Инлайн код */
 .tiptap-editor-content .tiptap code {
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 0.875em;
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
@@ -98,7 +107,7 @@
   padding: 1rem 1.25rem;
   margin: 0.75rem 0;
   overflow-x: auto;
-  font-family: 'Courier New', Courier, monospace;
+  font-family: "Courier New", Courier, monospace;
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -116,7 +125,9 @@
   text-decoration: underline;
   cursor: pointer;
 }
-.tiptap-editor-content .tiptap a:hover { color: #0056b3; }
+.tiptap-editor-content .tiptap a:hover {
+  color: #0056b3;
+}
 
 /* Изображения */
 .tiptap-editor-content .tiptap img {

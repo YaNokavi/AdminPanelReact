@@ -39,7 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionStorage.setItem(SESSION_KEY, "true");
         setState({ isAuthenticated: true, isLoading: false, error: null });
       } else {
-        setState({ isAuthenticated: false, isLoading: false, error: res.message });
+        setState({
+          isAuthenticated: false,
+          isLoading: false,
+          error: res.message,
+        });
       }
     } catch (err) {
       const message =
@@ -49,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    sessionStorage.removeItem("cunaedu_token");
+    sessionStorage.removeItem("cunaedu_auth");
     sessionStorage.removeItem(SESSION_KEY);
     setState({ isAuthenticated: false, isLoading: false, error: null });
   }, []);

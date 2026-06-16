@@ -13,6 +13,15 @@ import {
   useState,
 } from "react";
 
+interface ImageAttrs {
+  src: string;
+  alt?: string;
+  title?: string;
+  width?: string;
+  height?: string;
+  style?: string;
+}
+
 export interface TiptapEditorRef {
   insertImage: (url: string) => void;
   getHTML: () => string;
@@ -161,7 +170,7 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     [openImgEditModal],
   );
 
-  const validateAndGetAttrs = (): Record<string, string> | null => {
+  const validateAndGetAttrs = (): ImageAttrs | null => {
     const src = imgUrl.trim();
     if (!src) {
       setImgError("Укажите URL изображения");
@@ -177,9 +186,11 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
       setImgError("Высота должна быть целым числом больше 0 (px)");
       return null;
     }
-    const attrs: Record<string, string> = { src };
-    if (wRaw) attrs.width = wRaw; else attrs.width = "";
-    if (hRaw) attrs.height = hRaw; else attrs.height = "";
+    const attrs: ImageAttrs = { src };
+    if (wRaw) attrs.width = wRaw;
+    else attrs.width = "";
+    if (hRaw) attrs.height = hRaw;
+    else attrs.height = "";
     const style = imgStyle.trim();
     attrs.style = style || "";
     return attrs;
@@ -350,7 +361,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
             <h2 className="text-base font-semibold text-text-heading mb-4">
-              {imgEditMode ? "Редактировать изображение" : "Вставить изображение"}
+              {imgEditMode
+                ? "Редактировать изображение"
+                : "Вставить изображение"}
             </h2>
             <div className="space-y-3">
               <div>
@@ -363,7 +376,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                   className={inputCls}
                   placeholder="https://raw.githubusercontent.com/..."
                   value={imgUrl}
-                  onChange={(e) => { setImgUrl(e.target.value); setImgError(""); }}
+                  onChange={(e) => {
+                    setImgUrl(e.target.value);
+                    setImgError("");
+                  }}
                   onKeyDown={(e) => e.key === "Enter" && handleConfirmImg()}
                 />
               </div>
@@ -380,7 +396,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                       className={inputCls + " pr-9"}
                       placeholder="—"
                       value={imgWidth}
-                      onChange={(e) => { setImgWidth(e.target.value); setImgError(""); }}
+                      onChange={(e) => {
+                        setImgWidth(e.target.value);
+                        setImgError("");
+                      }}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
                       px
@@ -399,7 +418,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                       className={inputCls + " pr-9"}
                       placeholder="—"
                       value={imgHeight}
-                      onChange={(e) => { setImgHeight(e.target.value); setImgError(""); }}
+                      onChange={(e) => {
+                        setImgHeight(e.target.value);
+                        setImgError("");
+                      }}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-muted pointer-events-none">
                       px
@@ -410,19 +432,22 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
               <div>
                 <label className="block text-sm font-medium text-text-heading mb-1">
                   Style{" "}
-                  <span className="text-text-muted text-xs font-normal">(необязательно)</span>
+                  <span className="text-text-muted text-xs font-normal">
+                    (необязательно)
+                  </span>
                 </label>
                 <input
                   type="text"
                   className={inputCls}
                   placeholder="напр. vertical-align: middle"
                   value={imgStyle}
-                  onChange={(e) => { setImgStyle(e.target.value); setImgError(""); }}
+                  onChange={(e) => {
+                    setImgStyle(e.target.value);
+                    setImgError("");
+                  }}
                 />
               </div>
-              {imgError && (
-                <p className="text-sm text-red-500">{imgError}</p>
-              )}
+              {imgError && <p className="text-sm text-red-500">{imgError}</p>}
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button
