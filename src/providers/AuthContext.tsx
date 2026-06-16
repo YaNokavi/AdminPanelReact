@@ -23,10 +23,13 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SESSION_KEY = "cunaedu_auth";
+const TOKEN_KEY = "cunaedu_token";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
-    isAuthenticated: sessionStorage.getItem(SESSION_KEY) === "true",
+    isAuthenticated:
+      sessionStorage.getItem(SESSION_KEY) === "true" &&
+      sessionStorage.getItem(TOKEN_KEY) !== null,
     isLoading: false,
     error: null,
   });
@@ -35,14 +38,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, isLoading: true, error: null }));
     try {
       const res = await apiLogin(username, password);
-      if (res.success) {
+      if (res.success && res.token) {
         sessionStorage.setItem(SESSION_KEY, "true");
         setState({ isAuthenticated: true, isLoading: false, error: null });
       } else {
         setState({
           isAuthenticated: false,
           isLoading: false,
-          error: res.message,
+          error: res.message ?? "Ошибка авторизации",
         });
       }
     } catch (err) {
@@ -53,13 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem("cunaedu_token");
-    sessionStorage.removeItem("cunaedu_auth");
+    sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(SESSION_KEY);
     setState({ isAuthenticated: false, isLoading: false, error: null });
   }, []);
 
-  // Сброс ошибки при повторном вводе
   useEffect(() => {}, []);
 
   return (

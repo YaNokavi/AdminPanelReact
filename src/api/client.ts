@@ -23,11 +23,13 @@ export class ApiError extends Error {
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, headers = {}, noCache = false } = options;
 
+  const token = sessionStorage.getItem("cunaedu_token");
+
   const init: RequestInit = {
     method,
-    credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(noCache ? { "Cache-Control": "no-cache" } : {}),
       ...headers,
     },
