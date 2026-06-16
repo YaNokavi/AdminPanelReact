@@ -302,7 +302,7 @@ export default function StepEditorPage() {
       <ToastContainer toasts={toast.toasts} />
 
       {/* Top bar */}
-      <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 flex-shrink-0">
+      <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-5 flex-shrink-0 rounded-xl">
         <button
           onClick={goBack}
           className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition"
