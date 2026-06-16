@@ -296,9 +296,9 @@ export default function StepEditorPage() {
       <ToastContainer toasts={toast.toasts} />
 
       {/* ───────────────────────── Top bar ───────────────────────────────── */}
-      <div className="bg-white border-b border-border px-6 py-3 flex items-center flex-shrink-0 rounded-xl">
+      <div className="bg-white border-b border-border px-6 py-3 flex items-center justify-between flex-shrink-0 rounded-xl gap-4">
         {/* Левая часть: назад + заголовок */}
-        <div className="flex items-center gap-3 w-48 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 max-w-[30%]">
           <button
             onClick={goBack}
             className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition shrink-0"
@@ -329,7 +329,7 @@ export default function StepEditorPage() {
         </div>
 
         {/* Центральная часть: тип шага + тумблер режима */}
-        <div className="flex-1 flex items-center justify-center gap-3">
+        <div className="flex-1 flex items-center justify-center gap-3 shrink-0">
           <button
             onClick={() => setShowToggleConfirm(true)}
             disabled={loading || toggling}
@@ -433,7 +433,8 @@ export default function StepEditorPage() {
         </div>
 
         {/* Правая часть: несохранённые изменения + удалить + сохранить */}
-        <div className="flex items-center gap-2 w-48 justify-end shrink-0">
+        {/* Убрали w-48, добавили shrink-0 */}
+        <div className="flex items-center gap-3 shrink-0">
           {dirty && (
             <span className="text-xs text-orange-500 font-medium whitespace-nowrap">
               Несохранённые
@@ -443,7 +444,7 @@ export default function StepEditorPage() {
           <button
             onClick={() => setShowDeleteConfirm(true)}
             disabled={loading || deleting}
-            className="p-1.5 text-text-muted hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
+            className="p-1.5 text-text-muted hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50 shrink-0"
             title="Удалить шаг"
           >
             <svg
@@ -464,7 +465,7 @@ export default function StepEditorPage() {
           <button
             onClick={handleSave}
             disabled={saving || loading}
-            className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+            className="inline-flex items-center shrink-0 gap-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
           >
             {saving ? (
               <svg
