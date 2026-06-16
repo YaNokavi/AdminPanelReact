@@ -67,11 +67,11 @@ courses/{courseId}/{moduleId}/{submoduleId}/images/{filename}
 
 > ⚠️ Реальные имена таблиц отличаются от того, что используется внутри `processQuery` в `server.js`. Всегда используй имена ниже в новых запросах.
 
-| Таблица               | Ключевые поля                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------------- |
+| Таблица               | Ключевые поля                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------------- |
 | `course`              | `id`, `name`, `author`, `description`, `rating`, `iconurl`                                  |
-| `course_module`       | `id`, `name`, `courseid`                                                                    |
-| `submodule`           | `id`, `name`, `moduleid`                                                                    |
+| `course_module`       | `id`, `name`, `courseid`                                                                     |
+| `submodule`           | `id`, `name`, `moduleid`                                                                     |
 | `submodule_step`      | `id`, `submoduleid`, `courseid`, `contenturl`, `istest`                                     |
 | `migration.migration` | `id`, `courseid`, `moduleid`, `submoduleid`, `stepid`, `sql`, `action`, `version`, `islast` |
 
@@ -121,7 +121,8 @@ src/
 │                          # deleteDirectory, generateMigration
 ├── components/
 │   ├── FileItem.tsx        # Элемент списка (course/module/submodule/step) с кнопками действий
-│   ├── TiptapEditor.tsx    # Rich-text редактор (TipTap) — forwardRef, ref.insertImage(url)
+│   ├── TiptapEditor.tsx    # Rich-text редактор (TipTap) с вставкой и редактированием изображений,
+│   │                       # сохранением width/height/style из HTML и px-only модалкой
 │   ├── TestEditor.tsx      # Редактор тестов — вопросы + варианты + правильный ответ
 │   ├── Modal.tsx           # Универсальная модалка с footer
 │   ├── ConfirmDialog.tsx   # Диалог подтверждения удаления
@@ -136,15 +137,15 @@ src/
 │   ├── HomePage.tsx        # Главная: навигация по иерархии, модалки CRUD, drag&drop изображений,
 │   │                       # просмотр и удаление изображений папки (с фильтром .gitkeep)
 │   ├── StepEditorPage.tsx  # Редактор шага: TiptapEditor или TestEditor, сохранение, смена типа,
-│   │                       # загрузка и вставка изображений через кнопку 🖼 в тулбаре
+│   │                       # HTML source mode, top bar из трёх логических секций
 │   ├── FAQPage.tsx         # Статичный аккордеон FAQ
 │   ├── ContactsPage.tsx    # Форма контактов (статика)
 │   └── NotFoundPage.tsx    # 404
 ├── providers/
-│   ├── AuthContext.tsx      # isAuthenticated (sessionStorage), login(), logout()
-│   └── router.tsx           # HashRouter, маршруты: /login, /, /step-editor, /faq, /contacts
-├── App.tsx                  # Пустой (thin wrapper, не используется)
-├── main.tsx                 # Точка входа: StrictMode > AuthProvider > RouterProvider
+│   ├── AuthContext.tsx     # isAuthenticated (sessionStorage), login(), logout()
+│   └── router.tsx          # HashRouter, маршруты: /login, /, /step-editor, /faq, /contacts
+├── App.tsx                 # Пустой (thin wrapper, не используется)
+├── main.tsx                # Точка входа: StrictMode > AuthProvider > RouterProvider
 └── index.css
 ```
 
@@ -258,7 +259,7 @@ interface StepEditorState {
 
 ### Теория
 
-Обычный HTML (`<p>`, `<h1>`, `<ul>`, `<strong>` и т.д.), созданный TipTap. Хранится как `.txt` файл на GitHub.
+Обычный HTML (`<p>`, `<h1>`, `<ul>`, `<strong>`, `<img>` и т.д.), созданный TipTap. Хранится как `.txt` файл на GitHub.
 
 ### Тест
 
@@ -271,6 +272,34 @@ JSON-файл следующей структуры:
   "answer": ["Вариант 2"]
 }
 ```
+
+---
+
+## Нюансы редактора теории
+
+### TiptapEditor
+
+- Используется кастомный `CustomImage`, основанный на `@tiptap/extension-image`
+- Изображения работают как **inline**-узлы (`inline: true`, `group: "inline"`)
+- Редактор сохраняет и повторно читает из HTML атрибуты `width`, `height`, `style`
+- Вставка изображения идёт через модалку с полями:
+  - URL изображения
+  - ширина в px
+  - высота в px
+  - style (необязательно)
+- Поля ширины/высоты в модалке принимают только **пиксели** (`type="number"`, `min=1`)
+- Клик по уже вставленному изображению открывает модалку редактирования с предзаполненными атрибутами (`src`, `width`, `height`, `style`)
+
+### StepEditorPage
+
+- Для теории доступен тумблер **Редактор / HTML**
+- Режим **HTML** показывает текущий сырой HTML с тегами, а не визуальный preview
+- `TiptapEditor` остаётся смонтированным даже при переключении в HTML mode, чтобы не терять состояние
+- Top bar разбит на три логические секции:
+  - слева: назад + заголовок шага
+  - по центру: тип шага + переключатель режима
+  - справа: индикатор несохранённых изменений + удалить + сохранить
+- Область редактора больше не ограничена `max-w-3xl`, используется почти вся доступная ширина страницы
 
 ---
 
@@ -330,7 +359,7 @@ PASSWORD=...
 - Редактирование метаданных курса
 - Переименование курса/модуля/подмодуля
 - **Удаление курса/модуля/подмодуля** — рекурсивно (DB + GitHub), с предупреждением о количестве вложенных шагов
-- Drag & drop загрузка изображений (на HomePage)
+- Drag & drop загрузка изображений на **HomePage** только на уровне подмодуля
 - **Просмотр изображений папки** — при входе в подмодуль, с фильтрацией `.gitkeep`
 - **Удаление изображений через UI** — кнопка с подтверждением на карточке изображения (HomePage)
 - Генерация SQL-миграции (скачивание `.sql`)
@@ -341,12 +370,16 @@ PASSWORD=...
   - Сохранение на GitHub (updateFile / createFile)
   - Удаление шага (DB + GitHub)
   - Индикатор несохранённых изменений
-  - **Вставка изображения в редактор** — кнопка 🖼 в тулбаре, загружает в `submodulePath/images/`, вставляет по raw URL
+  - Режим просмотра **сырого HTML** с тегами
+  - Вставка изображения через модалку
+  - Сохранение `width`, `height`, `style` у изображений
+  - Редактирование уже вставленного изображения по клику
+  - Обновлённая top bar верстка с тремя логическими блоками
 
-### ❌ Не реализовано
+### 🔭 В перспективе
 
 - Переупорядочивание шагов (кнопки ↑↓ или drag-n-drop)
-- Preview шага (предпросмотр HTML)
+- Переход по шагам (вперёд/назад) со страницы самого шага
 
 ---
 
