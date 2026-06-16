@@ -57,6 +57,7 @@ export default function StepEditorPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
 
   const initialTestData = useRef<string>("");
   const initialHtml = useRef<string>("");
@@ -110,6 +111,7 @@ export default function StepEditorPage() {
     setFileSha("");
     setDirty(false);
     setLoading(true);
+    setPreviewMode(false);
     initialHtml.current = "";
     initialTestData.current = "";
 
@@ -258,6 +260,7 @@ export default function StepEditorPage() {
         initialHtml.current = "";
       }
       setDirty(false);
+      setPreviewMode(false);
       toast.success(`Тип изменён на «${newIsTest ? "Тест" : "Теория"}»`);
     } catch (e: unknown) {
       toast.error((e as Error).message ?? "Ошибка смены типа");
@@ -344,6 +347,44 @@ export default function StepEditorPage() {
           )}
         </button>
 
+        {/* Preview toggle — только для теории */}
+        {!isTest && !loading && (
+          <div className="flex items-center rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setPreviewMode(false)}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 transition ${
+                !previewMode
+                  ? "bg-primary text-white"
+                  : "bg-white text-text-muted hover:bg-surface"
+              }`}
+              title="Режим редактирования"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Редактор
+            </button>
+            <button
+              onClick={() => setPreviewMode(true)}
+              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 transition ${
+                previewMode
+                  ? "bg-primary text-white"
+                  : "bg-white text-text-muted hover:bg-surface"
+              }`}
+              title="Предпросмотр"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Просмотр
+            </button>
+          </div>
+        )}
+
         {dirty && (
           <span className="text-xs text-orange-500 font-medium">
             Несохранённые изменения
@@ -394,11 +435,40 @@ export default function StepEditorPage() {
         ) : isTest ? (
           <TestEditor data={testData} onChange={handleTestChange} />
         ) : (
-          <TiptapEditor
-            ref={editorRef}
-            content={htmlContent}
-            onChange={handleHtmlChange}
-          />
+          <>
+            {/* TiptapEditor всегда смонтирован, скрывается через hidden чтобы не терять состояние */}
+            <div className={previewMode ? "hidden" : "block"}>
+              <TiptapEditor
+                ref={editorRef}
+                content={htmlContent}
+                onChange={handleHtmlChange}
+              />
+            </div>
+
+            {/* Preview */}
+            {previewMode && (
+              <div className="max-w-3xl mx-auto bg-white rounded-xl border border-border shadow-sm">
+                <div className="flex items-center gap-2 px-6 py-3 border-b border-border">
+                  <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  <span className="text-sm font-medium text-text-muted">Предпросмотр</span>
+                  {dirty && (
+                    <span className="ml-auto text-xs text-orange-500">
+                      Показаны несохранённые изменения
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="prose prose-sm sm:prose max-w-none p-6"
+                  dangerouslySetInnerHTML={{ __html: htmlContent }}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
 
