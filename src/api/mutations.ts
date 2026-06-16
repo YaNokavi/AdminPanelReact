@@ -154,10 +154,20 @@ export async function renameItem(payload: RenamePayload) {
 }
 
 export async function generateMigration(): Promise<string> {
-  const BASE_URL = import.meta.env.VITE_API_URL ?? "https://admincuna-back-anderm.amvera.io";
+  const token = sessionStorage.getItem("cunaedu_token");
+  const BASE_URL =
+    import.meta.env.VITE_API_URL ?? "https://admincuna-back-anderm.amvera.io";
+
   const res = await fetch(`${BASE_URL}/api/generate-migration`, {
-    credentials: "include",
+    method: "GET",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.text();
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+
+  return res.text(); // ← text(), не json()
 }
