@@ -4,8 +4,14 @@ import Underline from "@tiptap/extension-underline";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Extension } from "@tiptap/core";
-import { useEffect, useCallback, useImperativeHandle, forwardRef, useState } from "react";
+
+import {
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  useState,
+} from "react";
 
 export interface TiptapEditorRef {
   insertImage: (url: string) => void;
@@ -27,20 +33,9 @@ const btnCls = (active: boolean) =>
 const inputCls =
   "w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition";
 
-// Enter → <br>, Shift+Enter → new paragraph
-const EnterAsBr = Extension.create({
-  name: "enterAsBr",
-  addKeyboardShortcuts() {
-    return {
-      Enter: () => this.editor.commands.setHardBreak(),
-      "Shift-Enter": ({ editor }) => editor.commands.splitBlock(),
-    };
-  },
-});
-
 const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
   { content, onChange },
-  ref
+  ref,
 ) {
   const editor = useEditor({
     extensions: [
@@ -48,8 +43,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
       Underline,
       Image.configure({ inline: false, allowBase64: false }),
       Link.configure({ openOnClick: false }),
-      Placeholder.configure({ placeholder: "Начните вводить содержимое шага..." }),
-      EnterAsBr,
+      Placeholder.configure({
+        placeholder: "Начните вводить содержимое шага...",
+      }),
     ],
     content,
     onUpdate({ editor }) {
@@ -57,14 +53,18 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     },
   });
 
-  useImperativeHandle(ref, () => ({
-    insertImage(url: string) {
-      editor?.chain().focus().setImage({ src: url }).run();
-    },
-    getHTML() {
-      return editor?.getHTML() ?? "";
-    },
-  }), [editor]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertImage(url: string) {
+        editor?.chain().focus().setImage({ src: url }).run();
+      },
+      getHTML() {
+        return editor?.getHTML() ?? "";
+      },
+    }),
+    [editor],
+  );
 
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
@@ -77,7 +77,10 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
     const prev = editor.getAttributes("link").href as string | undefined;
     const url = window.prompt("URL ссылки:", prev ?? "");
     if (url === null) return;
-    if (url === "") { editor.chain().focus().unsetLink().run(); return; }
+    if (url === "") {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
     editor.chain().focus().setLink({ href: url }).run();
   }, [editor]);
 
@@ -110,25 +113,133 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
       <div className="border border-gray-300 rounded-lg overflow-hidden flex flex-col min-w-0">
         {/* Toolbar */}
         <div className="flex flex-wrap gap-1 p-2 border-b border-gray-200 bg-gray-50">
-          <button type="button" onClick={() => editor.chain().focus().toggleBold().run()} className={btnCls(editor.isActive("bold"))} title="Bold"><b>B</b></button>
-          <button type="button" onClick={() => editor.chain().focus().toggleItalic().run()} className={btnCls(editor.isActive("italic"))} title="Italic"><i>I</i></button>
-          <button type="button" onClick={() => editor.chain().focus().toggleUnderline().run()} className={btnCls(editor.isActive("underline"))} title="Underline"><u>U</u></button>
-          <button type="button" onClick={() => editor.chain().focus().toggleStrike().run()} className={btnCls(editor.isActive("strike"))} title="Strike"><s>S</s></button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className={btnCls(editor.isActive("bold"))}
+            title="Bold"
+          >
+            <b>B</b>
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className={btnCls(editor.isActive("italic"))}
+            title="Italic"
+          >
+            <i>I</i>
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            className={btnCls(editor.isActive("underline"))}
+            title="Underline"
+          >
+            <u>U</u>
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            className={btnCls(editor.isActive("strike"))}
+            title="Strike"
+          >
+            <s>S</s>
+          </button>
           <div className="w-px bg-gray-300 mx-1" />
-          <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={btnCls(editor.isActive("heading", { level: 1 }))}>H1</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={btnCls(editor.isActive("heading", { level: 2 }))}>H2</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} className={btnCls(editor.isActive("heading", { level: 3 }))}>H3</button>
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 1 }).run()
+            }
+            className={btnCls(editor.isActive("heading", { level: 1 }))}
+          >
+            H1
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
+            className={btnCls(editor.isActive("heading", { level: 2 }))}
+          >
+            H2
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHeading({ level: 3 }).run()
+            }
+            className={btnCls(editor.isActive("heading", { level: 3 }))}
+          >
+            H3
+          </button>
           <div className="w-px bg-gray-300 mx-1" />
-          <button type="button" onClick={() => editor.chain().focus().toggleBulletList().run()} className={btnCls(editor.isActive("bulletList"))} title="Список">• —</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={btnCls(editor.isActive("orderedList"))} title="Нумерованный список">1.</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={btnCls(editor.isActive("blockquote"))} title="Цитата">&ldquo;&rdquo;</button>
-          <button type="button" onClick={() => editor.chain().focus().toggleCodeBlock().run()} className={btnCls(editor.isActive("codeBlock"))} title="Код">{"</>"}  </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={btnCls(editor.isActive("bulletList"))}
+            title="Список"
+          >
+            • —
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className={btnCls(editor.isActive("orderedList"))}
+            title="Нумерованный список"
+          >
+            1.
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            className={btnCls(editor.isActive("blockquote"))}
+            title="Цитата"
+          >
+            &ldquo;&rdquo;
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            className={btnCls(editor.isActive("codeBlock"))}
+            title="Код"
+          >
+            {"</>"}{" "}
+          </button>
           <div className="w-px bg-gray-300 mx-1" />
-          <button type="button" onClick={setLink} className={btnCls(editor.isActive("link"))} title="Ссылка">🔗</button>
-          <button type="button" onClick={openImgModal} className={btnCls(false)} title="Вставить изображение">🖼</button>
+          <button
+            type="button"
+            onClick={setLink}
+            className={btnCls(editor.isActive("link"))}
+            title="Ссылка"
+          >
+            🔗
+          </button>
+          <button
+            type="button"
+            onClick={openImgModal}
+            className={btnCls(false)}
+            title="Вставить изображение"
+          >
+            🖼
+          </button>
           <div className="w-px bg-gray-300 mx-1" />
-          <button type="button" onClick={() => editor.chain().focus().undo().run()} className={btnCls(false)} title="Отменить">↩</button>
-          <button type="button" onClick={() => editor.chain().focus().redo().run()} className={btnCls(false)} title="Повторить">↪</button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().undo().run()}
+            className={btnCls(false)}
+            title="Отменить"
+          >
+            ↩
+          </button>
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().redo().run()}
+            className={btnCls(false)}
+            title="Повторить"
+          >
+            ↪
+          </button>
         </div>
         <EditorContent
           editor={editor}
@@ -140,7 +251,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
       {showImgModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
-            <h2 className="text-base font-semibold text-text-heading mb-4">Вставить изображение</h2>
+            <h2 className="text-base font-semibold text-text-heading mb-4">
+              Вставить изображение
+            </h2>
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium text-text-heading mb-1">
@@ -158,7 +271,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-text-heading mb-1">Ширина</label>
+                  <label className="block text-sm font-medium text-text-heading mb-1">
+                    Ширина
+                  </label>
                   <input
                     type="text"
                     className={inputCls}
@@ -168,7 +283,9 @@ const TiptapEditor = forwardRef<TiptapEditorRef, Props>(function TiptapEditor(
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-sm font-medium text-text-heading mb-1">Высота</label>
+                  <label className="block text-sm font-medium text-text-heading mb-1">
+                    Высота
+                  </label>
                   <input
                     type="text"
                     className={inputCls}

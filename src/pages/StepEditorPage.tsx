@@ -7,12 +7,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import UnsavedChangesDialog from "../components/UnsavedChangesDialog";
 import { useToast } from "../hooks/useToast";
 import { fetchFileContent } from "../api/courses";
-import {
-  updateFile,
-  editStep,
-  createFile,
-  deleteFile,
-} from "../api/mutations";
+import { updateFile, editStep, createFile, deleteFile } from "../api/mutations";
 
 export interface StepEditorState {
   stepId: number;
@@ -46,8 +41,13 @@ export default function StepEditorPage() {
   const pendingNavRef = useRef<(() => void) | null>(null);
 
   const navigateBack = useCallback(() => {
-    if (!state) { navigate("/"); return; }
-    navigate("/", { state: { returnPath: state.submodulePath } as HomeReturnState });
+    if (!state) {
+      navigate("/");
+      return;
+    }
+    navigate("/", {
+      state: { returnPath: state.submodulePath } as HomeReturnState,
+    });
   }, [state, navigate]);
 
   const [isTest, setIsTest] = useState(state?.isTest ?? false);
@@ -131,14 +131,17 @@ export default function StepEditorPage() {
             try {
               const p = JSON.parse(raw);
               if (p && "question" in p) parsed = p as TestData;
-            } catch { /* ignore */ }
+            } catch {
+              /* ignore */
+            }
           } else if (raw && typeof raw === "object" && "question" in raw) {
             parsed = raw as TestData;
           }
           setTestData(parsed);
           initialTestData.current = JSON.stringify(parsed);
         } else {
-          const html = typeof res.content.data === "string" ? res.content.data : "";
+          const html =
+            typeof res.content.data === "string" ? res.content.data : "";
           setHtmlContent(html);
           await Promise.resolve();
           await Promise.resolve();
@@ -175,14 +178,17 @@ export default function StepEditorPage() {
           try {
             const p = JSON.parse(raw);
             if (p && "question" in p) parsed = p as TestData;
-          } catch { /* ignore */ }
+          } catch {
+            /* ignore */
+          }
         } else if (raw && typeof raw === "object" && "question" in raw) {
           parsed = raw as TestData;
         }
         setTestData(parsed);
         initialTestData.current = JSON.stringify(parsed);
       } else {
-        const html = typeof res.content.data === "string" ? res.content.data : "";
+        const html =
+          typeof res.content.data === "string" ? res.content.data : "";
         setHtmlContent(html);
         await Promise.resolve();
         await Promise.resolve();
@@ -302,8 +308,18 @@ export default function StepEditorPage() {
           className="p-1.5 text-text-muted hover:text-primary hover:bg-blue-50 rounded transition"
           title="Назад"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M15 19l-7-7 7-7"
+            />
           </svg>
         </button>
 
@@ -326,17 +342,35 @@ export default function StepEditorPage() {
         >
           {isTest ? (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
               </svg>
               Тест
             </>
           ) : (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
               Теория
             </>
@@ -355,9 +389,18 @@ export default function StepEditorPage() {
               }`}
               title="Режим редактирования"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
               </svg>
               Редактор
             </button>
@@ -370,9 +413,18 @@ export default function StepEditorPage() {
               }`}
               title="Исходный HTML"
             >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                  d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              <svg
+                className="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                />
               </svg>
               HTML
             </button>
@@ -391,9 +443,18 @@ export default function StepEditorPage() {
           className="p-1.5 text-text-muted hover:text-red-600 hover:bg-red-50 rounded transition disabled:opacity-50"
           title="Удалить шаг"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
           </svg>
         </button>
 
@@ -403,13 +464,38 @@ export default function StepEditorPage() {
           className="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
         >
           {saving ? (
-            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-4 h-4 animate-spin"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
           ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M5 13l4 4L19 7"
+              />
             </svg>
           )}
           {saving ? "Сохранение..." : "Сохранить"}
@@ -417,12 +503,27 @@ export default function StepEditorPage() {
       </div>
 
       {/* Editor body */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 max-w-3xl overflow-y-auto p-6">
         {loading ? (
           <div className="flex items-center justify-center h-64 text-text-muted">
-            <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            <svg
+              className="w-5 h-5 animate-spin mr-2"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8H4z"
+              />
             </svg>
             Загрузка содержимого...
           </div>
@@ -443,18 +544,31 @@ export default function StepEditorPage() {
             {sourceMode && (
               <div className="max-w-4xl mx-auto rounded-xl border border-border overflow-hidden shadow-sm">
                 <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 border-b border-gray-700">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  <svg
+                    className="w-4 h-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                    />
                   </svg>
-                  <span className="text-sm font-medium text-gray-300">Исходный HTML</span>
+                  <span className="text-sm font-medium text-gray-300">
+                    Исходный HTML
+                  </span>
                   {dirty && (
                     <span className="ml-auto text-xs text-orange-400">
                       Несохранённые изменения
                     </span>
                   )}
                 </div>
-                <pre className="bg-gray-900 text-gray-100 text-sm font-mono p-6 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">{htmlContent}</pre>
+                <pre className="bg-gray-900 text-gray-100 text-sm font-mono p-6 overflow-x-auto whitespace-pre-wrap break-words leading-relaxed">
+                  {htmlContent}
+                </pre>
               </div>
             )}
           </>
